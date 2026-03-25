@@ -1,0 +1,29 @@
+[project]
+name = "runforlife"
+version = "0.1.0"
+description = "AI agent-powered running coach for Hyrox training"
+readme = "README.md"
+authors = [
+    { name = "Tezuesh Varshney", email = "tezuesh.varshney@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.52.0",
+    "garminconnect @ git+https://github.com/cyberjunky/python-garminconnect.git@react",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8.0",
+    "ipython",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
