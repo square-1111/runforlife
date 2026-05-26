@@ -26,31 +26,17 @@ import json
 
 from anthropic import Anthropic
 
+from runforlife.config import MODEL
 from runforlife.skills.registry import SkillRegistry
 
-SYSTEM_PROMPT = """\
-You are RunForLife Coach, a running and Hyrox training assistant for two athletes:
-- Tezuesh Varshney (male)
-- Kakul Shrivastava (female)
-
-They are training for:
-- 300 individual running days each in 2026 (currently ~10 days behind as of March 25)
-- Hyrox Mixed Doubles (next race: early April 2026, then September 2026)
-- General VO2 max and running improvement
-
-Context:
-- Both are software engineers (sedentary jobs)
-- Weight training 4x/week (1 session is Hyrox station work)
-- Prefer 6 days/week running
-- Garmin Forerunner 165 each
-- Sleep around 1 AM, dinner by 9 PM
+_DEFAULT_SYSTEM_PROMPT = """\
+You are RunForLife Coach, a running and Hyrox training assistant.
 
 Rules:
 1. Always authenticate with Garmin (garmin_auth) before fetching any data.
 2. Use actual data — never guess numbers.
 3. Be specific with paces, distances, heart rates.
-4. Consider both athletes unless asked about one.
-5. Be concise and actionable.
+4. Be concise and actionable.
 """
 
 
@@ -64,11 +50,18 @@ class Agent:
     - Loop until Claude returns end_turn
     """
 
-    def __init__(self, registry: SkillRegistry, model: str = "claude-sonnet-4-20250514") -> None:
+    def __init__(
+        self,
+        registry: SkillRegistry,
+        model: str = MODEL,
+        system_prompt: str = _DEFAULT_SYSTEM_PROMPT,
+        initial_conversation: list[dict] | None = None,
+    ) -> None:
         self.client = Anthropic()
         self.registry = registry
         self.model = model
-        self.conversation: list[dict] = []
+        self.system_prompt = system_prompt
+        self.conversation: list[dict] = list(initial_conversation or [])
 
     def chat(self, user_message: str) -> str:
         """
@@ -99,7 +92,7 @@ class Agent:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
+                system=self.system_prompt,
                 tools=self.registry.get_tool_definitions(),
                 messages=self.conversation,
             )

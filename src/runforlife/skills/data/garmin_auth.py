@@ -75,15 +75,26 @@ class GarminAuth(Skill):
 
     def execute(self, **kwargs: Any) -> dict:
         user: str = kwargs["user"]
-        token_path = TOKENS_DIR / user
 
-        # Attempt 1: Reuse saved tokens (fast, no network for login)
-        if token_path.exists():
+        # Fast path: reuse in-memory session
+        if user in _sessions:
+            return {
+                "success": True,
+                "user": user,
+                "method": "in_memory",
+                "display_name": _sessions[user].display_name,
+            }
+
+        token_path = TOKENS_DIR / user
+        token_file = token_path / "garmin_tokens.json"
+        email, password = self._get_credentials(user)
+        garmin = Garmin(email, password)
+
+        # Attempt 1: Load cached tokens (fast, no full re-login)
+        if token_file.exists():
             try:
-                garmin = Garmin()
-                garmin.garth.load(str(token_path))
-                garmin.display_name = garmin.garth.profile["displayName"]
-                garmin.garth.save(str(token_path))
+                garmin.login(tokenstore=str(token_path))
+                garmin.client.dump(str(token_path))  # refresh token on disk
                 _sessions[user] = garmin
                 return {
                     "success": True,
@@ -96,11 +107,18 @@ class GarminAuth(Skill):
 
         # Attempt 2: Fresh login with credentials
         try:
-            email, password = self._get_credentials(user)
-            garmin = Garmin(email, password)
-            garmin.login()
+            mfa_status, _ = garmin.login()
+            if mfa_status == "needs_mfa":
+                return {
+                    "success": False,
+                    "user": user,
+                    "error": (
+                        "MFA required. Authenticate interactively first: "
+                        f"uv run python -m runforlife.auth {user}"
+                    ),
+                }
             token_path.mkdir(parents=True, exist_ok=True)
-            garmin.garth.dump(str(token_path))
+            garmin.client.dump(str(token_path))
             _sessions[user] = garmin
             return {
                 "success": True,
