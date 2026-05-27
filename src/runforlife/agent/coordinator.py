@@ -21,6 +21,7 @@ from runforlife.agent.specialists import (
     ALL_DOMAINS,
     ANALYTICS,
     PROMPT_BUILDERS,
+    RACE,
     RECOVERY,
     REGISTRY_FACTORIES,
     TRAINING,
@@ -32,10 +33,16 @@ _CLASSIFY_SYSTEM = """\
 You are a routing agent. Classify the athlete's message into exactly one category.
 
 Categories:
-- recovery   : sleep, HRV, body battery, stress, injury risk, readiness, rest days
-- training   : mileage, runs, workouts, training load, ACWR, gear, streaks, consistency
-- race       : VO2max, race predictions, goal time, fitness level, race strategy, pace targets
-- analytics  : correlations, patterns, statistics, SQL queries, data exploration, custom questions
+- recovery   : sleep, HRV, body battery, stress, injury risk, readiness, rest days, "how am I recovering"
+- training   : mileage, run history, recent runs, workouts, training load, ACWR, gear, streaks, consistency, "how has my training been", "show me my runs"
+- race       : VO2max, race predictions, goal time, "am I on track", "will I hit my goal", fitness level, race strategy, pace targets, "what do you think about my progress toward [goal]"
+- analytics  : correlations, statistics, SQL, comparing two metrics, "does X affect Y", data exploration
+
+Rules:
+- "progress" questions about a goal time → race
+- "run history", "last N runs", "how has my training been" → training
+- "how am I doing overall" → training (default to training over analytics)
+- Only use analytics when the user explicitly asks about correlations or statistics
 
 Reply with a single word: recovery, training, race, or analytics."""
 
@@ -86,11 +93,16 @@ class Coordinator:
         registry = REGISTRY_FACTORIES[domain]()
         system_prompt = PROMPT_BUILDERS[domain](self.user)
 
+        # Race and training benefit from deep reasoning over run data.
+        # Recovery and analytics are pattern lookups — thinking budget not needed.
+        thinking_budget = 12000 if domain in (RACE, TRAINING) else 0
+
         agent = Agent(
             registry,
             model=self.model,
             system_prompt=system_prompt,
             initial_conversation=history,
+            thinking_budget=thinking_budget,
         )
 
         response = agent.chat(message)

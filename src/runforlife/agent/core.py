@@ -56,12 +56,14 @@ class Agent:
         model: str = MODEL,
         system_prompt: str = _DEFAULT_SYSTEM_PROMPT,
         initial_conversation: list[dict] | None = None,
+        thinking_budget: int = 0,
     ) -> None:
         self.client = Anthropic()
         self.registry = registry
         self.model = model
         self.system_prompt = system_prompt
         self.conversation: list[dict] = list(initial_conversation or [])
+        self.thinking_budget = thinking_budget
 
     def chat(self, user_message: str) -> str:
         """
@@ -89,13 +91,20 @@ class Agent:
 
         while True:
             # Call Claude with all available tools
-            response = self.client.messages.create(
+            create_kwargs: dict = dict(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=16000 if self.thinking_budget else 4096,
                 system=self.system_prompt,
                 tools=self.registry.get_tool_definitions(),
                 messages=self.conversation,
             )
+            if self.thinking_budget:
+                create_kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": self.thinking_budget,
+                }
+
+            response = self.client.messages.create(**create_kwargs)
 
             # Add Claude's response to conversation history
             self.conversation.append({
@@ -108,7 +117,11 @@ class Agent:
             # Claude tells us what it wants to do via stop_reason.
 
             if response.stop_reason == "end_turn":
-                # Claude is done — extract and return text
+                # Print thinking blocks to console so the user can see reasoning
+                for block in response.content:
+                    if block.type == "thinking":
+                        print(f"\n  [thinking]\n{block.thinking}\n  [/thinking]\n")
+                # Return only the final text
                 return "\n".join(
                     block.text for block in response.content
                     if block.type == "text"

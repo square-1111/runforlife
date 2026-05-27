@@ -91,13 +91,10 @@ class GoalProgress(Skill):
                 "weeks_remaining": weeks_remaining,
             }
 
-        # Extract half marathon prediction — key name may vary by Garmin response
-        raw = predictions_result.get("predictions") or predictions_result
-        hm_prediction_str = (
-            raw.get("half_marathon")
-            or raw.get("halfMarathon")
-            or raw.get("21.1km")
-        )
+        # Predictions dict has keys like "Half Marathon", "5K", etc.
+        preds = predictions_result.get("predictions") or {}
+        hm_entry = preds.get("Half Marathon") or {}
+        hm_prediction_str = hm_entry.get("time_formatted")
 
         if not hm_prediction_str:
             return {

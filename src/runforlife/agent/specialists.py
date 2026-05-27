@@ -14,6 +14,42 @@ from runforlife.skills.base import Skill
 from runforlife.skills.registry import SkillRegistry
 
 
+def _format_metrics_table(rows: list[dict]) -> str:
+    """
+    Compact fixed-width table of daily metrics, oldest → newest.
+
+    Columns chosen to give the coach instant pattern awareness:
+    HRV trend, sleep quality, readiness, training load, and run distance.
+    """
+    if not rows:
+        return "  (no data yet — run nightly sync to populate)"
+
+    header = "  date         hrv  rhr  sleep  ready  batt   km    acwr  hrv_slope"
+    sep    = "  " + "-" * 66
+    lines  = [header, sep]
+
+    for r in rows:
+        def v(key, fmt="{}", fallback="—"):
+            val = r.get(key)
+            return fmt.format(val) if val is not None else fallback
+
+        hrv   = v("hrv_last_night",       "{:.0f}")
+        rhr   = v("resting_hr",           "{}")
+        sleep = v("sleep_score",          "{}")
+        ready = v("readiness_score",      "{}")
+        batt  = v("body_battery_end",     "{}")
+        km    = v("run_distance_km",      "{:.1f}") if r.get("ran_today") else "—"
+        acwr  = v("acwr",                 "{:.2f}")
+        slope = v("hrv_7d_slope",         "{:+.1f}")
+
+        lines.append(
+            f"  {r['date']}  {hrv:>4} {rhr:>4} {sleep:>5} {ready:>5} {batt:>4} "
+            f"{km:>5}  {acwr:>5}  {slope:>9}"
+        )
+
+    return "\n".join(lines)
+
+
 # ── Specialist names (used as keys everywhere) ────────────────────────────
 RECOVERY = "recovery"
 TRAINING = "training"
@@ -58,6 +94,10 @@ def _base_context(user: str) -> str:
         context += "\n\n## What I Know About You\n"
         context += "\n".join(f"- {m}" for m in memories)
 
+    from runforlife.storage.metrics_store import get_recent
+    recent = list(reversed(get_recent(user, n=14)))  # oldest → newest
+    context += f"\n\n## Recent 14 Days\n{_format_metrics_table(recent)}"
+
     return context
 
 
@@ -92,6 +132,37 @@ Your approach:
 - Track week-over-week mileage: no more than ~10% increase per week
 - We have {(date.fromisoformat('2026-09-28') - date.today()).days // 7} weeks to race — know the phase
 - Always authenticate with Garmin (garmin_auth) before fetching data
+- If recall_history returns no rows, the local DB is unsynced — NOT that the athlete hasn't trained. \
+Always fall back to live Garmin: fetch_activities, fetch_training_load, fetch_training_status
+- Never conclude "zero training" from an empty DB. Confirm with live data first.
+
+Before responding, reason through the data deeply:
+- Fetch fetch_hr_zones first so all HR analysis uses real zone boundaries.
+- Go through EVERY activity from fetch_activities one by one. Count session types. \
+  Compute actual percentages. Don't estimate — calculate.
+- Ask yourself: what is this athlete actually training? What are they missing? \
+  What does the pattern tell me about their trajectory toward the goal?
+- Only write the response after you've done that analysis in your thinking.
+
+Tool usage — use the right tool for the job:
+- For per-workout analysis (what training has been done, intensity, session types): \
+  call fetch_activities(user, start_date, end_date, activity_type="all"). \
+  Returns each session: type, distance, avg_pace, avg_hr, max_hr, training_effect_aerobic, \
+  training_effect_anaerobic. Use this whenever the athlete asks about their training.
+- For zone compliance on a specific run: call fetch_activity_detail(user, activity_id) \
+  which returns hr_zones with % time in each zone.
+- For the athlete's zone boundaries: call fetch_hr_zones(user).
+- For HRV trends, ACWR, weekly aggregates over a longer window: use recall_history.
+- Always compute start_date from today minus the requested window.
+
+Coaching output rules — follow these strictly:
+- Classify every session using actual avg_hr and zone boundaries: \
+  easy (avg_hr in Z1-Z2), moderate (avg_hr in Z3), hard (avg_hr in Z4-Z5).
+- Diagnose the intensity split with real counts: "38 easy runs, 0 threshold, 8 cycling."
+- That diagnosis IS the coaching insight — not the volume number.
+- Prescription = specific day, specific workout, specific pace, specific distance. \
+  Never say "add tempo work." Say "Tuesday: 2km warmup + 5km at 4:50/km + 1km cooldown."
+- Volume without intensity context is meaningless — always report both.
 
 {_base_context(user)}"""
 
@@ -116,6 +187,39 @@ Your approach:
 - Race-specific work (threshold, tempo, HM pace): 6–8 weeks before race
 - Hyrox: functional strength + SkiErg, sled, burpees — complements running base
 - Always authenticate with Garmin (garmin_auth) before fetching data
+- If recall_history returns no rows, the local DB is unsynced — NOT that the athlete hasn't trained. \
+Always fall back to live Garmin: fetch_vo2max, fetch_race_predictions, goal_progress, fetch_training_status
+- Never conclude "zero training" or "no data" from an empty DB. Live tools always have current data.
+
+Before responding, reason through the data deeply:
+- Fetch fetch_hr_zones first so all HR analysis uses real zone boundaries, not guesses.
+- Go through every activity from fetch_activities. Compute real intensity split percentages. \
+  Look at pace progression over weeks. Check if long runs are getting faster or stagnating.
+- Connect training pattern to the goal gap. Explain the mechanism, not just the gap number.
+- Only write the response after you've done that analysis in your thinking.
+
+Tool usage — use the right tool for the job:
+- For per-workout analysis (pace per run, HR per run, speed sessions, cycling sessions): \
+  call fetch_activities(user, start_date, end_date, activity_type="all"). \
+  This returns each individual workout with avg_pace, avg_hr, max_hr, training_effect_aerobic, \
+  training_effect_anaerobic, distance_km, type. Use this for any "last N weeks of training" question.
+- For zone compliance on a specific run: call fetch_activity_detail(user, activity_id).
+- For the athlete's zone boundaries: call fetch_hr_zones(user).
+- For aggregate trends (HRV slope, ACWR, weekly totals over months): use recall_history.
+- For goal gap and race prediction: use goal_progress or fetch_race_predictions.
+- Always compute start_date from today's date minus the requested window.
+
+Coaching output rules — follow these strictly:
+- Look at EVERY activity returned by fetch_activities. Identify: easy runs (avg_hr < 150, \
+  pace > 5:30/km), threshold runs (avg_hr 160-170), intervals (max_hr > 175), \
+  cycling (type contains "cycling"), strength work.
+- Identify what training is MISSING: no speed sessions? No threshold work? Only easy pace?
+- Structure: (1) what the data shows — be specific about sessions, \
+  (2) root cause diagnosis of any gap, (3) specific prescription.
+- Use real numbers from the data. "Your last 5 long runs averaged 5:42/km at 148bpm" \
+  not "your pace is slow."
+- Never give generic advice. Prescription = specific workout, specific pace, specific day.
+- Pace conversion: speed in m/s → pace in min/km = 1000 ÷ speed ÷ 60.
 
 {_base_context(user)}"""
 
@@ -188,6 +292,7 @@ def create_training_registry() -> SkillRegistry:
     from runforlife.skills.data.garmin_auth import GarminAuth
     from runforlife.skills.data.fetch_activities import FetchActivities
     from runforlife.skills.data.fetch_activity_detail import FetchActivityDetail
+    from runforlife.skills.data.fetch_hr_zones import FetchHRZones
     from runforlife.skills.data.fetch_training_load import FetchTrainingLoad
     from runforlife.skills.data.fetch_training_status import FetchTrainingStatus
     from runforlife.skills.data.fetch_training_readiness import FetchTrainingReadiness
@@ -207,8 +312,8 @@ def create_training_registry() -> SkillRegistry:
     from runforlife.skills.analysis.recall_memory import RecallMemory
 
     return _make_registry([
-        GarminAuth, FetchActivities, FetchActivityDetail, FetchTrainingLoad,
-        FetchTrainingStatus, FetchTrainingReadiness, FetchDailyStats,
+        GarminAuth, FetchActivities, FetchActivityDetail, FetchHRZones,
+        FetchTrainingLoad, FetchTrainingStatus, FetchTrainingReadiness, FetchDailyStats,
         FetchWorkouts, FetchGoals, FetchGear, FetchSteps, FetchIntensityMinutes,
         InjuryRisk, WeeklySummary, TrainingTrend, RunStreak, GoalProgress,
         RecallHistory, Remember, RecallMemory,
@@ -217,6 +322,7 @@ def create_training_registry() -> SkillRegistry:
 
 def create_race_registry() -> SkillRegistry:
     from runforlife.skills.data.garmin_auth import GarminAuth
+    from runforlife.skills.data.fetch_hr_zones import FetchHRZones
     from runforlife.skills.data.fetch_vo2max import FetchVO2Max
     from runforlife.skills.data.fetch_endurance_score import FetchEnduranceScore
     from runforlife.skills.data.fetch_race_predictions import FetchRacePredictions
@@ -231,7 +337,7 @@ def create_race_registry() -> SkillRegistry:
     from runforlife.skills.analysis.recall_memory import RecallMemory
 
     return _make_registry([
-        GarminAuth, FetchVO2Max, FetchEnduranceScore, FetchRacePredictions,
+        GarminAuth, FetchHRZones, FetchVO2Max, FetchEnduranceScore, FetchRacePredictions,
         FetchPersonalRecords, FetchProgressSummary, FetchTrainingStatus,
         GoalProgress, TrainingTrend, WeeklySummary, RecallHistory,
         Remember, RecallMemory,

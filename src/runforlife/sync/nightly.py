@@ -14,8 +14,8 @@ Usage:
   uv run python -m runforlife.sync.nightly --user tezuesh --start 2026-01-01 --end 2026-05-25
 
 Garmin rate limits:
-  1.5s delay between API calls within a day, 2s between days.
-  Full backfill of 1 year ≈ 365 days × 7 calls × 1.5s ≈ ~64 minutes.
+  0.3s delay between API calls within a day, 0.5s between days.
+  Full backfill of 5 months ≈ 150 days × 7 calls × 0.3s ≈ ~10 minutes.
 """
 
 import argparse
@@ -65,7 +65,7 @@ def sync_user(user: str, start_date: str, end_date: str) -> None:
             continue
 
         try:
-            doc = ingest_day(user, date_str, delay_seconds=1.5)
+            doc = ingest_day(user, date_str, delay_seconds=0.3)
             if doc:
                 print(f"  [OK] {date_str}: HRV={doc.hrv_last_night}, readiness={doc.readiness_score}, run={doc.run_distance_km}km")
                 success_count += 1
@@ -76,7 +76,7 @@ def sync_user(user: str, start_date: str, end_date: str) -> None:
             print(f"  [ERROR] {date_str}: {e}")
             error_count += 1
 
-        time.sleep(2.0)
+        time.sleep(0.5)
         current += timedelta(days=1)
 
     print(f"\n  Done: {success_count} ingested, {skip_count} skipped, {error_count} errors")

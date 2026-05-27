@@ -67,19 +67,36 @@ class FetchRacePredictions(Skill):
             else:
                 return f"{minutes}:{secs:02d}"
 
-        for prediction in predictions:
-            distance_m = prediction.get("raceDistanceInMeters")
-            time_s = prediction.get("raceTimeinSeconds")
-            
-            if distance_m and time_s:
-                distance_km = distance_m / 1000
-                race_name = distance_names.get(distance_m, f"{distance_km:.1f}km")
-                
-                formatted_predictions[race_name] = {
-                    "distance_km": distance_km,
-                    "time_seconds": time_s,
-                    "time_formatted": seconds_to_time(time_s)
-                }
+        # Garmin returns a flat dict: {time5K, time10K, timeHalfMarathon, timeMarathon}
+        flat_keys = {
+            "time5K": "5K",
+            "time10K": "10K",
+            "timeHalfMarathon": "Half Marathon",
+            "timeMarathon": "Marathon",
+        }
+        if isinstance(predictions, dict):
+            for key, race_name in flat_keys.items():
+                time_s = predictions.get(key)
+                if time_s:
+                    formatted_predictions[race_name] = {
+                        "time_seconds": time_s,
+                        "time_formatted": seconds_to_time(time_s),
+                    }
+        else:
+            # Fallback: list-of-dicts format
+            for prediction in (predictions or []):
+                if not isinstance(prediction, dict):
+                    continue
+                distance_m = prediction.get("raceDistanceInMeters")
+                time_s = prediction.get("raceTimeinSeconds")
+                if distance_m and time_s:
+                    distance_km = distance_m / 1000
+                    race_name = distance_names.get(distance_m, f"{distance_km:.1f}km")
+                    formatted_predictions[race_name] = {
+                        "distance_km": distance_km,
+                        "time_seconds": time_s,
+                        "time_formatted": seconds_to_time(time_s),
+                    }
 
         # Create summary for common distances
         summary_parts = []

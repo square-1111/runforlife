@@ -25,8 +25,9 @@ class FetchActivityDetail(Skill):
 
     description = (
         "Fetch detailed data for a specific activity by ID: splits/laps, "
-        "per-lap pace, HR, and training effect. "
-        "Use for deep-dive analysis of one specific run (e.g. 'how did my splits look?'). "
+        "per-lap pace, HR, training effect, and HR zone distribution (% time in Z1-Z5). "
+        "Use for deep-dive analysis of one specific run — especially to verify Zone 2 compliance "
+        "(was this actually a Z2 run or did it drift into Z3?). "
         "Get the activity_id from fetch_activities results. "
         "Requires garmin_auth first."
     )
@@ -79,6 +80,22 @@ class FetchActivityDetail(Skill):
         except Exception:
             pass
 
+        hr_zones = []
+        try:
+            zones_raw = garmin.get_activity_hr_in_timezones(activity_id)
+            total_secs = sum(z.get("secsInZone", 0) for z in (zones_raw or []))
+            for z in (zones_raw or []):
+                secs = z.get("secsInZone", 0)
+                hr_zones.append({
+                    "zone": z.get("zoneNumber"),
+                    "min_hr": z.get("zoneLowBoundary"),
+                    "seconds": round(secs),
+                    "minutes": round(secs / 60, 1),
+                    "pct": round(secs / total_secs * 100, 1) if total_secs else 0,
+                })
+        except Exception:
+            pass
+
         return {
             "success": True,
             "user": user,
@@ -96,4 +113,5 @@ class FetchActivityDetail(Skill):
             "calories": activity.get("calories"),
             "elevation_gain": activity.get("elevationGain"),
             "splits": splits,
+            "hr_zones": hr_zones,
         }
