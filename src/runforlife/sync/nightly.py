@@ -41,9 +41,10 @@ def _authenticate(user: str) -> bool:
     return True
 
 
-def sync_user(user: str, start_date: str, end_date: str) -> None:
+def sync_user(user: str, start_date: str, end_date: str, force: bool = False) -> None:
     """Sync all dates in [start_date, end_date] for a single user."""
-    print(f"\n=== Syncing {user}: {start_date} → {end_date} ===")
+    mode = "RESYNC" if force else "SYNC"
+    print(f"\n=== {mode} {user}: {start_date} → {end_date} ===")
 
     if not _authenticate(user):
         return
@@ -59,7 +60,7 @@ def sync_user(user: str, start_date: str, end_date: str) -> None:
     while current <= end:
         date_str = current.isoformat()
 
-        if has_day(user, date_str):
+        if has_day(user, date_str) and not force:
             skip_count += 1
             current += timedelta(days=1)
             continue
@@ -96,6 +97,10 @@ def main() -> None:
     parser.add_argument("--backfill", action="store_true", help="Backfill from 2025-01-01")
     parser.add_argument("--start", help="Start date YYYY-MM-DD (overrides --backfill)")
     parser.add_argument("--end", help="End date YYYY-MM-DD (default: yesterday)")
+    parser.add_argument(
+        "--resync", action="store_true",
+        help="Re-ingest existing days (picks up new metric columns)"
+    )
     args = parser.parse_args()
 
     today = date.today()
@@ -113,7 +118,7 @@ def main() -> None:
     users_to_sync = list(USERS) if args.user == "all" else [args.user]
 
     for user in users_to_sync:
-        sync_user(user, start_date, end_date)
+        sync_user(user, start_date, end_date, force=args.resync)
 
     print("\nSync complete.")
 

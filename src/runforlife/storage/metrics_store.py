@@ -46,11 +46,36 @@ CREATE INDEX IF NOT EXISTS idx_daily_metrics_user_date
 ON daily_metrics (user_id, date)
 """
 
-# Columns added after initial schema — migrated safely via ALTER TABLE
-_SUBJECTIVE_COLUMNS = [
-    ("subjective_readiness", "INTEGER"),
-    ("life_context_note",    "TEXT"),
-    ("session_rpe",          "INTEGER"),
+# All columns added after initial schema — migrated safely via ALTER TABLE
+_MIGRATION_COLUMNS = [
+    # Subjective check-in (added first)
+    ("subjective_readiness",  "INTEGER"),
+    ("life_context_note",     "TEXT"),
+    ("session_rpe",           "INTEGER"),
+    # Sleep detail
+    ("deep_sleep_min",        "INTEGER"),
+    ("rem_sleep_min",         "INTEGER"),
+    ("light_sleep_min",       "INTEGER"),
+    ("sleep_start_local",     "TEXT"),
+    ("sleep_hr_avg",          "INTEGER"),
+    ("respiration_avg",       "REAL"),
+    # HRV enrichment
+    ("hrv_weekly_avg",        "INTEGER"),
+    ("hrv_5min_high",         "INTEGER"),
+    ("hrv_baseline_low",      "INTEGER"),
+    ("hrv_baseline_high",     "INTEGER"),
+    ("hrv_garmin_status",     "TEXT"),
+    # Body battery detail
+    ("body_battery_morning",  "INTEGER"),
+    ("body_battery_peak",     "INTEGER"),
+    # Stress detail
+    ("stress_max",            "INTEGER"),
+    ("stress_qualifier",      "TEXT"),
+    # Activity
+    ("steps",                 "INTEGER"),
+    ("active_calories",       "INTEGER"),
+    # Fitness
+    ("vo2_max",               "REAL"),
 ]
 
 
@@ -64,8 +89,7 @@ def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
     try:
         conn.execute(_CREATE_TABLE)
         conn.execute(_CREATE_INDEX)
-        # Migrate: add subjective columns to existing DBs
-        for col, defn in _SUBJECTIVE_COLUMNS:
+        for col, defn in _MIGRATION_COLUMNS:
             try:
                 conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN {col} {defn}")
             except sqlite3.OperationalError:

@@ -18,33 +18,38 @@ def _format_metrics_table(rows: list[dict]) -> str:
     """
     Compact fixed-width table of daily metrics, oldest → newest.
 
-    Columns chosen to give the coach instant pattern awareness:
-    HRV trend, sleep quality, readiness, training load, and run distance.
+    Two-row header: top-level categories + column names for readability.
     """
     if not rows:
         return "  (no data yet — run nightly sync to populate)"
 
-    header = "  date         hrv  rhr  sleep  ready  batt   km    acwr  hrv_slope"
-    sep    = "  " + "-" * 66
-    lines  = [header, sep]
+    header = (
+        "  date         hrv  rhr  slp  deep  rem  bed    batt  stress  "
+        "km    acwr  vo2"
+    )
+    sep = "  " + "-" * 78
+    lines = [header, sep]
 
     for r in rows:
         def v(key, fmt="{}", fallback="—"):
             val = r.get(key)
             return fmt.format(val) if val is not None else fallback
 
-        hrv   = v("hrv_last_night",       "{:.0f}")
-        rhr   = v("resting_hr",           "{}")
-        sleep = v("sleep_score",          "{}")
-        ready = v("readiness_score",      "{}")
-        batt  = v("body_battery_end",     "{}")
-        km    = v("run_distance_km",      "{:.1f}") if r.get("ran_today") else "—"
-        acwr  = v("acwr",                 "{:.2f}")
-        slope = v("hrv_7d_slope",         "{:+.1f}")
+        hrv    = v("hrv_last_night",     "{:.0f}")
+        rhr    = v("resting_hr",         "{}")
+        sleep  = v("sleep_score",        "{}")
+        deep   = v("deep_sleep_min",     "{}")
+        rem    = v("rem_sleep_min",      "{}")
+        bed    = v("sleep_start_local",  "{}")      # "23:45" or "—"
+        batt   = v("body_battery_morning", "{}")    # wake-time battery
+        stress = v("stress_avg",         "{}")
+        km     = v("run_distance_km",    "{:.1f}") if r.get("ran_today") else "—"
+        acwr   = v("acwr",               "{:.2f}")
+        vo2    = v("vo2_max",            "{:.1f}")
 
         lines.append(
-            f"  {r['date']}  {hrv:>4} {rhr:>4} {sleep:>5} {ready:>5} {batt:>4} "
-            f"{km:>5}  {acwr:>5}  {slope:>9}"
+            f"  {r['date']}  {hrv:>4} {rhr:>3} {sleep:>4} {deep:>4} {rem:>4} "
+            f"{bed:>6}  {batt:>4}  {stress:>5}  {km:>5}  {acwr:>5}  {vo2:>5}"
         )
 
     return "\n".join(lines)

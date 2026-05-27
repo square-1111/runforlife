@@ -1,75 +1,48 @@
 """
 Data collector for the nightly sync pipeline.
 
-Calls existing Garmin skills for a single date and returns
-raw data dict that ingest.py maps to a DailyDocument.
+Calls Garmin API directly for a single date and returns a raw dict
+that ingest.py maps to a DailyDocument.
 
-We call skill.execute() directly rather than going through the agent loop —
-this is intentional. The agent loop exists for LLM-driven tool calls.
-The sync pipeline runs autonomously without an LLM in the loop.
+Key design: get_user_summary is a single call that provides RHR, stress,
+body battery, and steps — replacing 3 previously broken individual calls.
+
+Call budget per day (was 7, now 5):
+  1. get_sleep_data       — sleep stages, score, bedtime, sleep HR
+  2. get_hrv_data         — HRV nightly avg + weekly avg + baseline + status
+  3. get_user_summary     — RHR, stress, body battery, steps, calories
+  4. get_activities       — run details (pace, HR, training effect)
+  5. get_max_metrics      — VO2max daily estimate
 
 Errors are soft — a missing metric produces None, not a crash.
-The document gets stored with whatever data was available.
 """
 
 import time
 
-from runforlife.skills.data.fetch_activities import FetchActivities
-from runforlife.skills.data.fetch_body_battery import FetchBodyBattery
-from runforlife.skills.data.fetch_heart_rate import FetchHeartRate
-from runforlife.skills.data.fetch_hrv import FetchHRV
-from runforlife.skills.data.fetch_sleep import FetchSleep
-from runforlife.skills.data.fetch_training_readiness import FetchTrainingReadiness
-from runforlife.skills.data.fetch_training_status import FetchTrainingStatus
-
-_sleep_skill = FetchSleep()
-_hrv_skill = FetchHRV()
-_hr_skill = FetchHeartRate()
-_training_status_skill = FetchTrainingStatus()
-_training_readiness_skill = FetchTrainingReadiness()
-_activities_skill = FetchActivities()
-_body_battery_skill = FetchBodyBattery()
+from runforlife.skills.data.garmin_auth import get_session
 
 
-def collect_day(user: str, date: str, delay_seconds: float = 1.0) -> dict:
+def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     """
     Collect all metrics for a single user/date.
 
-    delay_seconds: pause between API calls to respect Garmin rate limits.
-    Returns dict with keys: sleep, hrv, heart_rate, training_status,
-    training_readiness, activities, body_battery. Each may be None on error.
+    Returns dict with keys: sleep, hrv, summary, activities, vo2max.
+    Each value is the raw API response dict, or None on error.
     """
+    garmin = get_session(user)
     results: dict = {}
 
-    def _fetch(key: str, skill, **kwargs):
+    def _fetch(key: str, fn, *args, **kwargs):
         try:
-            r = skill.execute(**kwargs)
-            results[key] = r if r.get("success") else None
-        except Exception as e:
+            results[key] = fn(*args, **kwargs)
+        except Exception:
             results[key] = None
         time.sleep(delay_seconds)
 
-    _fetch("sleep", _sleep_skill, user=user, date=date)
-    _fetch("hrv", _hrv_skill, user=user, date=date)
-    _fetch("heart_rate", _hr_skill, user=user, date=date)
-    _fetch("training_status", _training_status_skill, user=user, date=date)
-    _fetch("training_readiness", _training_readiness_skill, user=user, date=date)
-    _fetch("body_battery", _body_battery_skill, user=user, start_date=date, end_date=date)
-    # Activities: fetch running for this specific date only
-    _fetch("activities", _activities_skill, user=user, start_date=date, end_date=date, activity_type="running")
+    _fetch("sleep",      garmin.get_sleep_data,          date)
+    _fetch("hrv",        garmin.get_hrv_data,            date)
+    _fetch("summary",    garmin.get_user_summary,        date)
+    _fetch("activities", garmin.get_activities_by_date,  date, date)
+    _fetch("vo2max",     garmin.get_max_metrics,         date)
 
     return results
-
-
-def extract_sleep_efficiency(sleep_data: dict | None) -> float | None:
-    """Pull sleep efficiency % from FetchSleep result."""
-    if not sleep_data:
-        return None
-    # FetchSleep doesn't currently return efficiency directly — compute from durations
-    # Efficiency = (total_sleep - awake) / total_sleep * 100
-    # We can approximate: score 85+ ≈ 90%+ efficiency; use score as proxy if needed
-    # Note: Garmin's sleep score is not the same as efficiency but correlates
-    score = sleep_data.get("sleep_score", {})
-    if isinstance(score, dict):
-        return None  # score is quality label, not a percentage — skip for now
-    return None
