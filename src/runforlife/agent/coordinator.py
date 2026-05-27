@@ -110,4 +110,13 @@ class Coordinator:
         save_message(self.user, "user", message)
         save_message(self.user, "assistant", response)
 
+        # Post-session: extract behavioral signals and update personality model
+        try:
+            from runforlife.agent.reflection import extract_session_signals
+            from runforlife.storage.personality_store import update_personality
+            signals = extract_session_signals(message, response)
+            update_personality(self.user, signals)
+        except Exception:
+            pass  # Never let reflection errors break the main loop
+
         return _DOMAIN_LABELS[domain], response

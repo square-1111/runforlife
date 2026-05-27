@@ -98,6 +98,28 @@ def _base_context(user: str) -> str:
     recent = list(reversed(get_recent(user, n=14)))  # oldest → newest
     context += f"\n\n## Recent 14 Days\n{_format_metrics_table(recent)}"
 
+    # Composite readiness score (requires at least a few days of data)
+    try:
+        from runforlife.rag.readiness import compute_readiness
+        readiness = compute_readiness(user)
+        context += f"\n\n## Today's Readiness\n{readiness.summary_line}"
+        if readiness.conflict_detected:
+            context += (
+                "\n⚠️  HRV-subjective conflict: athlete self-reports low energy "
+                "despite acceptable HRV. Err on the side of the subjective signal."
+            )
+    except Exception:
+        pass  # Not enough data yet
+
+    # Personality-driven coaching style (activates after ~4 sessions)
+    try:
+        from runforlife.storage.personality_store import coaching_style_block
+        style = coaching_style_block(user)
+        if style:
+            context += style
+    except Exception:
+        pass
+
     return context
 
 
@@ -167,12 +189,23 @@ Coaching output rules — follow these strictly:
 {_base_context(user)}"""
 
 
+def _banister_line(user: str) -> str:
+    """Return a one-line Banister summary for the race prompt, or empty string."""
+    try:
+        from runforlife.rag.banister import compute_banister
+        state = compute_banister(user)
+        return f"\n## Fitness-Fatigue State\n{state.summary}" if state else ""
+    except Exception:
+        return ""
+
+
 def build_race_prompt(user: str) -> str:
     from runforlife.storage.profile_store import load_profile
     profile = load_profile(user)
     hm = profile["goals"]["half_marathon"]
     race_date = date.fromisoformat(hm["race_date"])
     weeks_remaining = round((race_date - date.today()).days / 7, 1)
+    banister = _banister_line(user)
 
     return f"""\
 You are a race performance and strategy coach. Your domain: VO2max, race \
@@ -220,6 +253,7 @@ Coaching output rules — follow these strictly:
   not "your pace is slow."
 - Never give generic advice. Prescription = specific workout, specific pace, specific day.
 - Pace conversion: speed in m/s → pace in min/km = 1000 ÷ speed ÷ 60.
+{banister}
 
 {_base_context(user)}"""
 

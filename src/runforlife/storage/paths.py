@@ -31,3 +31,11 @@ def profile_path(user: str) -> Path:
 
 def metrics_db_path(user: str) -> Path:
     return user_dir(user) / "metrics.db"
+
+
+def personality_path(user: str) -> Path:
+    return user_dir(user) / "personality.json"
+
+
+def banister_path(user: str) -> Path:
+    return user_dir(user) / "banister.json"

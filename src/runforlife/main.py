@@ -13,12 +13,36 @@ Each message is automatically routed to the right specialist:
 """
 
 import argparse
+from datetime import date
 
 from dotenv import load_dotenv
 
 from runforlife.agent.coordinator import Coordinator
 from runforlife.config import USERS
 from runforlife.storage.conversation_db import load_recent
+from runforlife.storage.metrics_store import has_checkin_today, upsert_subjective
+
+
+def _run_checkin(user: str, today: str) -> None:
+    """Prompt for today's subjective check-in if not already done."""
+    print("\n── Daily Check-in ──────────────────────────")
+    while True:
+        try:
+            raw = input("How are you feeling today? (1–10): ").strip()
+            readiness = int(raw)
+            if 1 <= readiness <= 10:
+                break
+            print("  Please enter a number between 1 and 10.")
+        except (ValueError, EOFError):
+            print("  Please enter a number between 1 and 10.")
+
+    try:
+        context = input("Anything going on this week? (stress, travel, illness, or 'all good'): ").strip()
+    except EOFError:
+        context = "all good"
+
+    upsert_subjective(user, today, readiness, context or "all good")
+    print("── Got it. ─────────────────────────────────\n")
 
 
 def main() -> None:
@@ -33,6 +57,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     user: str = args.user
+    today = date.today().isoformat()
 
     history = load_recent(user, n=40)
     history_turns = len(history) // 2
@@ -44,7 +69,12 @@ def main() -> None:
     if history_turns:
         print(f"Loaded {history_turns} previous turn(s).")
     print("Specialists: Recovery | Training | Race | Analytics")
-    print("Type 'quit' to exit.\n")
+    print("Type 'quit' to exit.")
+
+    if not has_checkin_today(user, today):
+        _run_checkin(user, today)
+    else:
+        print()
 
     while True:
         try:

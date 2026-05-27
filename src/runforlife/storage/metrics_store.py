@@ -46,6 +46,13 @@ CREATE INDEX IF NOT EXISTS idx_daily_metrics_user_date
 ON daily_metrics (user_id, date)
 """
 
+# Columns added after initial schema — migrated safely via ALTER TABLE
+_SUBJECTIVE_COLUMNS = [
+    ("subjective_readiness", "INTEGER"),
+    ("life_context_note",    "TEXT"),
+    ("session_rpe",          "INTEGER"),
+]
+
 
 @contextmanager
 def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
@@ -57,6 +64,12 @@ def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
     try:
         conn.execute(_CREATE_TABLE)
         conn.execute(_CREATE_INDEX)
+        # Migrate: add subjective columns to existing DBs
+        for col, defn in _SUBJECTIVE_COLUMNS:
+            try:
+                conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN {col} {defn}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
         conn.commit()
         yield conn
     finally:
@@ -135,3 +148,38 @@ def count_days(user: str) -> int:
             (user,),
         ).fetchone()
     return row[0] if row else 0
+
+
+def upsert_subjective(
+    user: str,
+    date: str,
+    readiness: int,
+    context: str,
+    rpe: int | None = None,
+) -> None:
+    """Save today's subjective check-in. Creates a skeleton row if none exists."""
+    with _conn(user) as conn:
+        # Ensure row exists (INSERT OR IGNORE preserves existing Garmin data)
+        conn.execute(
+            "INSERT OR IGNORE INTO daily_metrics (user_id, date, ran_today) VALUES (?, ?, 0)",
+            (user, date),
+        )
+        conn.execute(
+            """UPDATE daily_metrics
+               SET subjective_readiness = ?,
+                   life_context_note    = ?,
+                   session_rpe          = COALESCE(?, session_rpe)
+               WHERE user_id = ? AND date = ?""",
+            (readiness, context, rpe, user, date),
+        )
+        conn.commit()
+
+
+def has_checkin_today(user: str, date: str) -> bool:
+    """Whether today's subjective check-in has been recorded."""
+    with _conn(user) as conn:
+        row = conn.execute(
+            "SELECT subjective_readiness FROM daily_metrics WHERE user_id = ? AND date = ?",
+            (user, date),
+        ).fetchone()
+    return row is not None and row[0] is not None
