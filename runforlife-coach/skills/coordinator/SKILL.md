@@ -76,6 +76,19 @@ For now, handle cross-domain questions **sequentially**:
 Do not fan out in parallel and do not invoke a conflict-resolver subagent —
 neither exists in Phase 1.
 
+## Step 3c — Pass along the athlete's coaching style
+
+The SessionStart hook may inject this athlete's coaching style under a
+`## Coaching Style for This Athlete` heading (from
+`personality_store.coaching_style_block`). If that block is present in context,
+copy it verbatim into every specialist's Task prompt so the specialist honors it
+(e.g. "lead with numbers", "explain the why"). Add it after the athlete name:
+
+> "Athlete: `tezuesh`. Coaching style: <paste the injected style block>.
+> Question: how did I sleep this week? Use this athlete's data only."
+
+If no such block is present, omit it — do not invent a style.
+
 ## Step 4 — Empty-DB guardrail (ALWAYS carry this)
 
 An empty or missing local `metrics.db` means the athlete's data is **UNSYNCED**,
@@ -91,3 +104,5 @@ invoke so they never conclude "no training" from an empty DB.
   questions yourself.
 - Never do arithmetic — the specialists call Python scripts for that.
 - Always pass the athlete name explicitly to every subagent.
+- If a `## Coaching Style for This Athlete` block was injected this session, pass
+  it to every subagent so the answer matches the athlete's preferred style.
