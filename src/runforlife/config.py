@@ -15,6 +15,9 @@ DATA_DIR = _PROJECT_ROOT / "data"
 # Auth tokens (already exists)
 TOKENS_DIR = _PROJECT_ROOT / "tokens"
 
+# Athlete data root — all per-athlete data lives here (outside the repo, never committed)
+RUNFORLIFE_HOME = Path.home() / ".runforlife"
+
 # Supported users
 USERS = ("tezuesh", "kakul")
 

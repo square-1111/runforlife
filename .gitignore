@@ -14,3 +14,10 @@ wheels/
 
 # Garmin auth tokens
 tokens/
+
+# Local athlete data (also lives in ~/.runforlife)
+data/
+
+# Vendored SDK (separate git repo) and tooling scratch
+fit-python-sdk/
+.playwright-mcp/

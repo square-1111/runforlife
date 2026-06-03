@@ -19,9 +19,13 @@ Conflict rule: when HRV component > 0.7 but subjective ≤ 0.4 for 2+
 consecutive days → downgrade to Amber regardless of HRV signal.
 """
 
+import argparse
+import json
+import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from runforlife import config
 from runforlife.storage.metrics_store import get_recent, get_window
 
 
@@ -158,3 +162,42 @@ def compute_readiness(user: str, target_date: str | None = None) -> ReadinessRes
             "rhr":       round(rhr_component, 2),
         },
     )
+
+
+def main() -> int:
+    """CLI entry point. Prints readiness as JSON to stdout."""
+    parser = argparse.ArgumentParser(
+        prog="python -m runforlife.rag.readiness",
+        description="Compute composite readiness score for an athlete.",
+    )
+    parser.add_argument(
+        "--user",
+        required=True,
+        choices=config.USERS,
+        help="Athlete to compute readiness for.",
+    )
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Target date (YYYY-MM-DD). Defaults to today.",
+    )
+    args = parser.parse_args()
+
+    try:
+        result = compute_readiness(args.user, args.date)
+    except Exception as exc:  # noqa: BLE001 — surface as JSON error to caller
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    payload = {
+        "score": result.score,
+        "tier": result.tier,
+        "conflict_detected": result.conflict_detected,
+        "components": result.components,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

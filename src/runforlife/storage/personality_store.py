@@ -14,9 +14,12 @@ Update rule (PAMU-lite):
   - Below 0.2 confidence → emit no coaching style block (neutral defaults)
 """
 
+import fcntl
 import json
+import os
+from contextlib import contextmanager
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 from runforlife.storage.paths import personality_path
 
@@ -57,51 +60,77 @@ def load_personality(user: str) -> dict:
 
 
 def save_personality(user: str, model: dict) -> None:
+    """Persist the model atomically (temp file + os.replace in same dir)."""
     model["last_updated"] = date.today().isoformat()
-    personality_path(user).write_text(json.dumps(model, indent=2))
+    path = personality_path(user)
+    payload = json.dumps(model, indent=2)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(payload)
+    os.replace(tmp, path)
+
+
+@contextmanager
+def _personality_lock(user: str) -> Iterator[None]:
+    """Hold an exclusive flock over the load-modify-save of one user's model.
+
+    The lock lives on a dedicated lockfile in the athlete directory so it
+    never collides with the atomic os.replace of personality.json itself.
+    """
+    lock_path = personality_path(user).with_name(".personality.lock")
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def update_personality(user: str, signals: "SessionSignals") -> None:
-    """Update personality model from one session's signals. Saves to disk."""
-    model = load_personality(user)
-    counts = model["signal_counts"]
+    """Update personality model from one session's signals. Saves to disk.
 
-    # data_depth
-    detail = signals.preferred_detail
-    if detail in ("low", "medium", "high"):
-        _record(counts, "data_depth", detail)
-        _maybe_promote(model, "data_depth", counts["data_depth"])
+    The full load-modify-save is guarded by an exclusive flock so concurrent
+    sessions cannot interleave and clobber each other's signal counts.
+    """
+    with _personality_lock(user):
+        model = load_personality(user)
+        counts = model["signal_counts"]
 
-    # communication
-    if signals.pushed_back:
-        _record(counts, "communication", "direct_blunt")
-        _maybe_promote(model, "communication", counts["communication"])
-    elif signals.responded_to_narrative:
-        _record(counts, "communication", "supportive_narrative")
-        _maybe_promote(model, "communication", counts["communication"])
-    elif signals.user_engaged and not signals.pushed_back:
-        _record(counts, "communication", "balanced")
-        _maybe_promote(model, "communication", counts["communication"])
+        # data_depth
+        detail = signals.preferred_detail
+        if detail in ("low", "medium", "high"):
+            _record(counts, "data_depth", detail)
+            _maybe_promote(model, "data_depth", counts["data_depth"])
 
-    # pushback_tolerance — high if user ignored recommendations
-    if signals.ignored_recommendation:
-        _record(counts, "pushback_tolerance", "high")
-        _maybe_promote(model, "pushback_tolerance", counts["pushback_tolerance"])
+        # communication
+        if signals.pushed_back:
+            _record(counts, "communication", "direct_blunt")
+            _maybe_promote(model, "communication", counts["communication"])
+        elif signals.responded_to_narrative:
+            _record(counts, "communication", "supportive_narrative")
+            _maybe_promote(model, "communication", counts["communication"])
+        elif signals.user_engaged and not signals.pushed_back:
+            _record(counts, "communication", "balanced")
+            _maybe_promote(model, "communication", counts["communication"])
 
-    # plan_style — asked_followup suggests wanting deeper explanations
-    if signals.asked_followup:
-        _record(counts, "plan_style", "principles_adaptive")
-        _maybe_promote(model, "plan_style", counts["plan_style"])
+        # pushback_tolerance — high if user ignored recommendations
+        if signals.ignored_recommendation:
+            _record(counts, "pushback_tolerance", "high")
+            _maybe_promote(model, "pushback_tolerance", counts["pushback_tolerance"])
 
-    # Confidence: grows as total signals accumulate
-    total = sum(sum(d.values()) for d in counts.values() if isinstance(d, dict))
-    model["confidence"] = round(min(1.0, total / 20.0), 3)
+        # plan_style — asked_followup suggests wanting deeper explanations
+        if signals.asked_followup:
+            _record(counts, "plan_style", "principles_adaptive")
+            _maybe_promote(model, "plan_style", counts["plan_style"])
 
-    # Auto-save life context to memory store
-    if signals.life_context_mentioned:
-        _save_life_context(user, signals.life_context_mentioned)
+        # Confidence: grows as total signals accumulate
+        total = sum(sum(d.values()) for d in counts.values() if isinstance(d, dict))
+        model["confidence"] = round(min(1.0, total / 20.0), 3)
 
-    save_personality(user, model)
+        # Auto-save life context to memory store
+        if signals.life_context_mentioned:
+            _save_life_context(user, signals.life_context_mentioned)
+
+        save_personality(user, model)
 
 
 def coaching_style_block(user: str) -> str:

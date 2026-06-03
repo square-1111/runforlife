@@ -18,9 +18,13 @@ Training load proxy: distance_km × intensity_factor × 10
   Easy runs (~360 s/km) → factor ≈ 0.67; fast runs (~270 s/km) → factor ≈ 0.92
 """
 
-from dataclasses import dataclass
+import argparse
+import json
+import sys
+from dataclasses import asdict, dataclass
 from datetime import date
 
+from runforlife import config
 from runforlife.storage.metrics_store import get_window
 
 
@@ -109,3 +113,35 @@ def _daily_load(row: dict) -> float:
     pace = row.get("run_avg_pace_sec_per_km") or 360
     intensity = max(0.5, 1.0 - (pace - 240) / 360)
     return dist * intensity * 10
+
+
+def main() -> int:
+    """CLI entry point. Prints Banister state as JSON to stdout."""
+    parser = argparse.ArgumentParser(
+        prog="python -m runforlife.rag.banister",
+        description="Compute CTL/ATL/TSB Banister fitness-fatigue state for an athlete.",
+    )
+    parser.add_argument(
+        "--user",
+        required=True,
+        choices=config.USERS,
+        help="Athlete to compute Banister state for.",
+    )
+    args = parser.parse_args()
+
+    try:
+        state = compute_banister(args.user)
+    except Exception as exc:  # noqa: BLE001 — surface as JSON error to caller
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    if state is None:
+        print(json.dumps({"error": "insufficient data: fewer than 14 days of metrics"}), file=sys.stderr)
+        return 1
+
+    print(json.dumps(asdict(state), indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
