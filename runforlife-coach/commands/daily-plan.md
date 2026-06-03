@@ -77,30 +77,36 @@ local DB is **unsynced** — this does NOT mean the athlete has not trained or i
 the athlete the data looks unsynced, suggest they run `/garmin-sync` to pull fresh Garmin data,
 and STOP — do not fabricate a plan. Re-run `/daily-plan` once synced.
 
-## 5. Fan out to the specialists (pass the athlete name explicitly)
+## 5. Fan out to the specialists IN PARALLEL (pass the athlete name explicitly)
 
-Invoke BOTH subagents via the Task tool. In each prompt, state the athlete name explicitly and the
-target date, and ask for their domain call for today:
+Invoke BOTH subagents via the Task tool **in a single message** so they run concurrently — do not
+wait for one to finish before starting the other. In each prompt, state the athlete name and the
+target date explicitly, and ask for their domain call for today:
 
-- **recovery-specialist** — prompt it to assess `<athlete>` for `<date>` and return its REST /
-  EASY / GO call with the readiness score, tier, and the 2-3 driving metrics.
-- **training-specialist** — prompt it to assess `<athlete>` for `<date>` and return the next-session
+- **recovery-specialist** — assess `<athlete>` for `<date>` and return its REST / EASY / GO call
+  with the readiness score, tier, and the 2-3 driving metrics.
+- **training-specialist** — assess `<athlete>` for `<date>` and return the next-session
   prescription (type, distance, target pace, HR zone) gated by ACWR band and goal phase.
 
-Run them for the same athlete and date. Each runs in isolated context, so the athlete name and date
-MUST be in the prompt text — they are not inherited.
+Each runs in isolated context, so the athlete name and date MUST be in the prompt text — they are
+not inherited.
 
-## 6. Synthesize ONE concrete recommendation for today
+## 6. Reconcile into ONE concrete recommendation for today
 
-Reconcile the two specialist outputs into a single call. The recovery call gates intensity; the
-training call sets the session shape:
+If the two specialists **agree** — recovery clears the training intensity (recovery GO + a quality
+session, or both pointing easy) — synthesize directly:
 
-- If recovery says **REST** → today is `Run: no`, type `rest` (or active recovery only).
-- If recovery says **EASY** → cap the training prescription at easy (Z1-Z2): keep the distance but
-  pin pace/zone to easy, even if training proposed quality.
-- If recovery says **GO** → use the training-specialist's prescribed session as-is.
-- If the two genuinely conflict (e.g. training wants intervals, recovery says EASY), the
-  lower-intensity signal wins — show which signal won and why in the rationale.
+- recovery **GO** → use the training-specialist's prescribed session as-is.
+- recovery **EASY** and training already easy → keep it as easy (Z1–Z2).
+
+If the two **genuinely conflict** (e.g. recovery says REST/EASY but training wants tempo/intervals),
+invoke the **`conflict-resolver`** subagent. Pass it explicitly: the athlete name, the recovery
+call + driving numbers (readiness score/tier, `conflict_detected`, key components, any active
+injury/illness), and the training prescription + its ACWR band and goal phase. It applies the
+editable priority ladder at
+`/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md` and returns ONE
+decision naming which rule fired. Use that decision as today's call, and name the winning rule in
+the rationale below.
 
 Then output exactly this block (numbers first), filling every field:
 

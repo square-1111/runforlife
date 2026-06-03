@@ -57,24 +57,41 @@ the Task prompt, e.g.:
 
 Return the specialist's answer to the user.
 
-## Step 3b — Cross-domain question → sequential, then synthesize
+## Step 3b — Cross-domain question → parallel fan-out, then arbitrate
 
-Cross-domain questions (the classic one is **"should I run today?"**, which
-needs both recovery state and training load) are where parallel fan-out and
-conflict resolution will eventually live — that is **Phase 3** and is NOT built
-yet.
+Cross-domain questions (the classic one is **"should I run today?"**, plus
+`/daily-plan` and `/weekly-plan`) need both recovery state and training load.
+Handle them with a real parallel fan-out:
 
-For now, handle cross-domain questions **sequentially**:
+1. **Fan out in PARALLEL.** In a SINGLE message, issue BOTH Task calls at once so
+   they run concurrently — do not wait for one before starting the other:
+   - `recovery-specialist` (athlete name passed explicitly) → its REST/EASY/GO call.
+   - `training-specialist` (athlete name passed explicitly) → its session prescription.
 
-1. Invoke `recovery-specialist` (athlete name passed explicitly).
-2. Then invoke `training-specialist` (athlete name passed explicitly).
-3. Synthesize both answers into one coherent recommendation. If the two
-   specialists point in different directions, surface the tension plainly and
-   lean conservative (recovery caution outweighs training enthusiasm); note that
-   automated conflict arbitration is a Phase 3 feature.
+2. **Do they agree?** If recovery clears the training intensity (e.g. recovery
+   says GO and training prescribes a quality session, or both point easy), there
+   is **no conflict** — synthesize the two into one recommendation directly and
+   return it. Do NOT invoke the conflict-resolver.
 
-Do not fan out in parallel and do not invoke a conflict-resolver subagent —
-neither exists in Phase 1.
+3. **Do they conflict?** If they point in different directions (e.g. recovery
+   says REST/EASY but training wants tempo/intervals, or vice-versa), invoke the
+   **`conflict-resolver`** subagent. Pass it, explicitly: the athlete name, the
+   recovery call + its driving numbers (readiness score/tier, `conflict_detected`,
+   key components, any active injury/illness), and the training prescription + its
+   ACWR band and goal phase. It applies the editable priority ladder at
+   `/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md`
+   and returns ONE decision naming which rule fired.
+
+4. **Present the arbitrated answer.** Relay the resolver's decision, and always
+   surface **which rule won and why** so the athlete sees the trade-off (e.g.
+   "EASY — Rule 2: ACWR 1.6 > 1.5 capped the intervals training wanted").
+
+Health/injury-avoidance outranks training stimulus, which outranks the goal
+timeline — the resolver enforces that ladder; you just route to it and relay.
+
+> Optional: for a query needing several independent metric reads at once, you may
+> use the read-only `parallel-fetch` subagent to assemble readiness + banister +
+> recent runs + ephemeral in one pass. It never writes anything.
 
 ## Step 3c — Pass along the athlete's coaching style
 
