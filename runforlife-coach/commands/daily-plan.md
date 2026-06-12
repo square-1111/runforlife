@@ -125,3 +125,23 @@ Why: <1-2 lines tying the readiness score/tier and the ACWR band/goal phase to t
 
 Keep it tight and factual. Do not invent metrics — every number must come from the scripts or the
 specialist outputs. If a field is genuinely unavailable from synced data, say so rather than guess.
+
+## 7. Capture feedback when the athlete reacts to prior advice (closes the /reflect loop)
+
+`/reflect` can only learn from recorded feedback. Whenever the athlete tells you how an earlier
+recommendation landed — followed it and it worked, ignored it, "that was too hard," felt great,
+etc. — record ONE feedback item so the self-evolution loop has fuel. Do this **only on a real
+reaction**; never fabricate outcomes to fill the file.
+
+```bash
+cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/memory_manager.py \
+  --user <athlete> --add-feedback \
+  --advice-type <e.g. deload|tempo|rest_day|long_run> \
+  --advice "<the call that was given>" \
+  --rating <positive|neutral|negative> \
+  [--adherence <followed|partial|ignored>] \
+  [--outcome "<what actually happened — metrics if available>"]
+```
+
+The record is athlete-scoped (writes `<athlete>/feedback.json`), so it respects the isolation guard.
+Keep `advice_type` values consistent across days so `feedback_stats.py` can aggregate them.

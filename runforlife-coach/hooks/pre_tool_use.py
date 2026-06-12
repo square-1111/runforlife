@@ -105,6 +105,39 @@ def _referenced_athletes(command: str) -> set[str]:
     return referenced
 
 
+_POINTER_RE = re.compile(r"\.runforlife[/\\]active_athlete\b", re.IGNORECASE)
+
+
+def _writes_active_pointer(command: str) -> bool:
+    """True if the command references the active_athlete pointer file.
+
+    The /switch command writes the incoming athlete's name into this pointer.
+    That write necessarily *names* the new athlete, which otherwise looks like a
+    cross-athlete reference and gets blocked — a chicken-and-egg: the guard reads
+    the OLD active athlete, so you could never switch. Referencing the pointer
+    file is the structural signal that this is a switch, not a reach into another
+    athlete's data directory.
+    """
+    return bool(command and _POINTER_RE.search(command))
+
+
+def _referenced_athletes_via_path(command: str) -> set[str]:
+    """Names referenced specifically as an ``athletes/<name>`` path segment.
+
+    This is the dangerous kind of cross-athlete reference — actually reaching
+    into another athlete's data directory — as distinct from a bare name token
+    (which a legitimate pointer write contains by necessity).
+    """
+    if not command:
+        return set()
+    lowered = command.lower()
+    found: set[str] = set()
+    for name in _KNOWN_ATHLETES:
+        if re.search(rf"athletes[/\\]{re.escape(name)}(?![\w])", lowered):
+            found.add(name)
+    return found
+
+
 def _touches_athlete_data(command: str) -> bool:
     """Heuristic: does this command clearly access athlete data at all?
 
@@ -139,6 +172,18 @@ def _evaluate(command: str, active: str | None) -> tuple[bool, str]:
         # athlete (or no athlete) is fine.
         others = sorted(name for name in referenced if name != active)
         if others:
+            # Exception: the /switch pointer-write names the incoming athlete by
+            # necessity. Allow it as long as it does not ALSO reach into that
+            # athlete's data directory (athletes/<name>/...). Without this, the
+            # guard blocks /switch's own write and the active athlete can never
+            # change.
+            if _writes_active_pointer(command):
+                path_others = sorted(
+                    name for name in _referenced_athletes_via_path(command)
+                    if name != active
+                )
+                if not path_others:
+                    return False, ""
             other = others[0]
             reason = (
                 f"[RunForLife] Blocked: command targets '{other}' but the active "

@@ -9,6 +9,9 @@ athlete_memory API. Usage (from the repo root):
     uv run python runforlife-coach/scripts/memory_manager.py --user <name> --show insights
     uv run python runforlife-coach/scripts/memory_manager.py --user <name> --delete ephemeral 3
     uv run python runforlife-coach/scripts/memory_manager.py --user <name> --prune-expired
+    uv run python runforlife-coach/scripts/memory_manager.py --user <name> --add-feedback \
+        --advice-type deload --advice "Skip Push, easy 3km" --rating positive \
+        --adherence followed --outcome "felt fresh next day, HRV up"
 
 Categories: insights | ephemeral | feedback
 """
@@ -109,6 +112,32 @@ def _cmd_prune(user: str) -> None:
     print(f"Pruned {removed} expired ephemeral item(s).")
 
 
+def _cmd_add_feedback(
+    user: str,
+    advice_type: str,
+    advice: str,
+    rating: str,
+    adherence: str | None,
+    outcome: str | None,
+) -> None:
+    """Append one feedback record so /reflect has something to learn from.
+
+    This is the capture step the self-evolution loop was missing: advice was
+    given for weeks but never recorded, so feedback_stats.py always tallied
+    zero. Records flow through athlete_memory.add_feedback (atomic write,
+    auto-incrementing id) into the same feedback.json that /reflect reads.
+    """
+    new_id = athlete_memory.add_feedback(
+        user,
+        advice_type=advice_type,
+        advice=advice,
+        rating=rating,
+        adherence=adherence,
+        outcome=outcome,
+    )
+    print(f"Recorded feedback id {new_id} for {user} (advice_type={advice_type}, rating={rating}).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Manage an athlete's memory files.")
     parser.add_argument("--user", required=True, help="Athlete name.")
@@ -120,6 +149,16 @@ def main() -> None:
                        help="Delete a record by category and id.")
     group.add_argument("--prune-expired", action="store_true",
                        help="Delete expired ephemeral items.")
+    group.add_argument("--add-feedback", action="store_true",
+                       help="Record one coaching-feedback item (capture step for "
+                            "/reflect). Requires --advice-type, --advice, --rating; "
+                            "--adherence and --outcome are optional.")
+    # Field values for --add-feedback (ignored by the other actions).
+    parser.add_argument("--advice-type", help="Category, e.g. 'rest_day', 'tempo', 'deload'.")
+    parser.add_argument("--advice", help="The advice that was given (short text).")
+    parser.add_argument("--rating", help="How it landed, e.g. 'positive' | 'neutral' | 'negative'.")
+    parser.add_argument("--adherence", help="Optional: 'followed' | 'partial' | 'ignored'.")
+    parser.add_argument("--outcome", help="Optional: what actually happened afterward.")
     args = parser.parse_args()
 
     if args.list:
@@ -137,6 +176,25 @@ def main() -> None:
         _cmd_delete(args.user, category, record_id)
     elif args.prune_expired:
         _cmd_prune(args.user)
+    elif args.add_feedback:
+        missing = [
+            flag for flag, value in (
+                ("--advice-type", args.advice_type),
+                ("--advice", args.advice),
+                ("--rating", args.rating),
+            )
+            if not value
+        ]
+        if missing:
+            parser.error("--add-feedback requires " + ", ".join(missing))
+        _cmd_add_feedback(
+            args.user,
+            args.advice_type,
+            args.advice,
+            args.rating,
+            args.adherence,
+            args.outcome,
+        )
 
 
 if __name__ == "__main__":
