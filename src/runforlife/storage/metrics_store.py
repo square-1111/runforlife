@@ -72,6 +72,34 @@ CREATE INDEX IF NOT EXISTS idx_activity_sessions_user_date
 ON activity_sessions (user_id, date)
 """
 
+# Per-lap/split detail for RUN activities. The daily_metrics table stores ONLY
+# the daily run aggregate (total distance, avg pace, avg HR) — which discards the
+# rep-by-rep structure of an interval workout. This sibling table captures each
+# lap of the MAIN run so the July interval block's rep-level pace/HR is persisted.
+# Keyed by (user_id, date, activity_id, lap_index) so a --resync of the same
+# activity updates each lap rather than duplicating. Additive: it never touches
+# the run_* fields or the daily aggregation.
+_CREATE_RUN_LAPS = """\
+CREATE TABLE IF NOT EXISTS run_laps (
+    user_id              TEXT    NOT NULL,
+    date                 TEXT    NOT NULL,
+    activity_id          TEXT    NOT NULL,
+    lap_index            INTEGER NOT NULL,
+    distance_km          REAL,
+    duration_sec         REAL,
+    avg_pace_sec_per_km  REAL,
+    avg_hr               INTEGER,
+    max_hr               INTEGER,
+    created_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date, activity_id, lap_index)
+)
+"""
+
+_CREATE_RUN_LAPS_INDEX = """\
+CREATE INDEX IF NOT EXISTS idx_run_laps_user_date
+ON run_laps (user_id, date)
+"""
+
 # All columns added after initial schema — migrated safely via ALTER TABLE
 _MIGRATION_COLUMNS = [
     # Subjective check-in (added first)
@@ -122,6 +150,8 @@ def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
         conn.execute(_CREATE_INDEX)
         conn.execute(_CREATE_ACTIVITY_SESSIONS)
         conn.execute(_CREATE_ACTIVITY_SESSIONS_INDEX)
+        conn.execute(_CREATE_RUN_LAPS)
+        conn.execute(_CREATE_RUN_LAPS_INDEX)
         for col, defn in _MIGRATION_COLUMNS:
             try:
                 conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN {col} {defn}")
@@ -342,5 +372,63 @@ def get_activity_sessions(user: str, start_date: str, end_date: str) -> list[dic
             ORDER BY date ASC, start ASC
             """,
             (user, start_date, end_date),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# --- run_laps: per-lap/split detail for RUN activities ----------------------
+
+def upsert_run_lap(
+    user: str,
+    date: str,
+    activity_id: str,
+    lap_index: int,
+    distance_km: float | None = None,
+    duration_sec: float | None = None,
+    avg_pace_sec_per_km: float | None = None,
+    avg_hr: int | None = None,
+    max_hr: int | None = None,
+) -> None:
+    """Insert or update one lap/split of a run.
+
+    Keyed by (user_id, date, activity_id, lap_index). Re-ingesting the same lap
+    (e.g. on a --resync) refreshes its values rather than duplicating. This is a
+    SEPARATE table from daily_metrics: it never touches the run_* fields or the
+    daily wellness row.
+    """
+    with _conn(user) as conn:
+        conn.execute(
+            """
+            INSERT INTO run_laps
+                (user_id, date, activity_id, lap_index,
+                 distance_km, duration_sec, avg_pace_sec_per_km, avg_hr, max_hr)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, date, activity_id, lap_index) DO UPDATE SET
+                distance_km         = excluded.distance_km,
+                duration_sec        = excluded.duration_sec,
+                avg_pace_sec_per_km = excluded.avg_pace_sec_per_km,
+                avg_hr              = excluded.avg_hr,
+                max_hr              = excluded.max_hr
+            """,
+            (user, date, str(activity_id), lap_index,
+             distance_km, duration_sec, avg_pace_sec_per_km, avg_hr, max_hr),
+        )
+        conn.commit()
+
+
+def get_run_laps(user: str, date: str) -> list[dict]:
+    """Return all stored laps for a date, ordered by activity then lap_index.
+
+    Read-only friendly: a future interval specialist can read rep-level pace/HR
+    without disturbing the run aggregation in daily_metrics.
+    """
+    with _conn(user) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM run_laps
+            WHERE user_id = ? AND date = ?
+            ORDER BY activity_id ASC, lap_index ASC
+            """,
+            (user, date),
         ).fetchall()
     return [dict(r) for r in rows]

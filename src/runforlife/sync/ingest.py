@@ -20,6 +20,7 @@ from runforlife.storage.metrics_store import (
     get_window,
     upsert_activity_session,
     upsert_day,
+    upsert_run_lap,
 )
 from runforlife.sync.collector import SOURCE_KEYS, collect_day
 
@@ -106,6 +107,63 @@ def _persist_activity_sessions(user: str, date: str, activities: list) -> None:
             max_hr=round(max_hr) if max_hr else None,
             training_load=a.get("activityTrainingLoad"),
             distance_km=round(dist_m / 1000, 2) if dist_m else None,
+        )
+
+
+def _parse_laps(splits_raw) -> list[dict]:
+    """Normalize a Garmin split-summary payload into a list of lap dicts.
+
+    Accepts the dict returned by get_activity_split_summaries(activity_id),
+    which carries laps under 'lapDTOs' (or 'splitSummaries'). Returns one dict
+    per lap with: lap_index, distance_km, duration_sec, avg_pace_sec_per_km,
+    avg_hr, max_hr. Pure — no network, safe on None/empty/missing keys.
+    """
+    if not isinstance(splits_raw, dict):
+        return []
+    lap_list = splits_raw.get("lapDTOs") or splits_raw.get("splitSummaries") or []
+    if not isinstance(lap_list, list):
+        return []
+
+    laps = []
+    for i, lap in enumerate(lap_list):
+        if not isinstance(lap, dict):
+            continue
+        dist_m = lap.get("distance")
+        dur_sec = lap.get("duration")
+        speed = lap.get("averageSpeed")
+        avg_hr = lap.get("averageHR")
+        max_hr = lap.get("maxHR")
+        laps.append({
+            "lap_index": i,
+            "distance_km": round(dist_m / 1000, 3) if dist_m else None,
+            "duration_sec": float(dur_sec) if dur_sec else None,
+            "avg_pace_sec_per_km": round(1000 / speed) if speed and speed > 0 else None,
+            "avg_hr": round(avg_hr) if avg_hr else None,
+            "max_hr": round(max_hr) if max_hr else None,
+        })
+    return laps
+
+
+def _persist_run_laps(user: str, date: str, activity_id, splits_raw) -> None:
+    """Persist the MAIN run's laps to the run_laps table.
+
+    Additive: the daily run aggregation in _build_document is left exactly as-is;
+    laps are captured separately so the July interval block's rep-level pace/HR
+    survives. No-ops when there's no activity_id or no laps.
+    """
+    if not activity_id:
+        return
+    for lap in _parse_laps(splits_raw):
+        upsert_run_lap(
+            user,
+            date=date,
+            activity_id=str(activity_id),
+            lap_index=lap["lap_index"],
+            distance_km=lap["distance_km"],
+            duration_sec=lap["duration_sec"],
+            avg_pace_sec_per_km=lap["avg_pace_sec_per_km"],
+            avg_hr=lap["avg_hr"],
+            max_hr=lap["max_hr"],
         )
 
 
@@ -277,5 +335,10 @@ def ingest_day(user: str, date: str, delay_seconds: float = 0.3) -> DailyDocumen
     doc = _build_document(user, date, raw)
     _enrich_features(doc)
     upsert_day(user, doc)
+
+    # Additive: capture the main run's per-lap detail (fetched by collect_day).
+    # Independent of the daily aggregate above — a missing/failed splits fetch
+    # leaves run_laps empty without affecting the stored day.
+    _persist_run_laps(user, date, raw.get("run_activity_id"), raw.get("run_splits"))
 
     return doc

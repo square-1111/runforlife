@@ -30,6 +30,26 @@ logger = logging.getLogger(__name__)
 SOURCE_KEYS = ("sleep", "hrv", "summary", "activities", "vo2max")
 
 
+def _main_run_activity_id(activities) -> str | None:
+    """activityId of the longest RUN that day (same 'main run' the agg uses).
+
+    Returns None when there were no runs. Mirrors ingest's run-selection so the
+    laps we fetch belong to the run that drives the daily run_* aggregate.
+    """
+    if not isinstance(activities, list):
+        return None
+    runs = [
+        a for a in activities
+        if isinstance(a, dict)
+        and "running" in (a.get("activityType", {}) or {}).get("typeKey", "").lower()
+    ]
+    if not runs:
+        return None
+    main_run = max(runs, key=lambda a: a.get("distance") or 0)
+    aid = main_run.get("activityId")
+    return str(aid) if aid is not None else None
+
+
 def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     """
     Collect all metrics for a single user/date.
@@ -63,6 +83,16 @@ def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     _fetch("summary",    garmin.get_user_summary,        date)
     _fetch("activities", garmin.get_activities_by_date,  date, date)
     _fetch("vo2max",     garmin.get_max_metrics,         date)
+
+    # Follow-up fetch: per-lap/split detail for the MAIN run only, so the July
+    # interval block's rep-level pace/HR is persisted. This is additive — it does
+    # not change any of the daily aggregate sources above, and is intentionally
+    # NOT in SOURCE_KEYS so a missing/failed splits fetch never affects whether a
+    # day counts as having data.
+    run_activity_id = _main_run_activity_id(results.get("activities"))
+    if run_activity_id is not None:
+        _fetch("run_splits", garmin.get_activity_split_summaries, run_activity_id)
+        results["run_activity_id"] = run_activity_id
 
     errored = [k for k, v in provenance.items() if v.startswith("error")]
     if errored:
