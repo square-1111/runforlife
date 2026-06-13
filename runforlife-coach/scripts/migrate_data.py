@@ -18,17 +18,15 @@ DO NOT run automatically — this is a one-shot data migration.
 """
 
 import argparse
-import json
-import os
 import shutil
 import sqlite3
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from runforlife.config import USERS  # noqa: E402
+from runforlife.storage.athlete_memory import atomic_write_json  # noqa: E402
 from runforlife.storage.paths import (  # noqa: E402
     athlete_dir,
     banister_path,
@@ -43,20 +41,6 @@ from runforlife.storage.paths import (  # noqa: E402
 
 # Legacy memory rows are split by these created-at / expiry semantics.
 _COPY_FILES = ("metrics.db", "banister.json", "personality.json", "profile.json")
-
-
-def _atomic_write_json(path: Path, data: dict) -> None:
-    """Write JSON atomically: temp file in the same dir + os.replace."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-        os.replace(tmp_name, path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
 
 
 def _target_for(user: str, filename: str) -> Path:
@@ -146,8 +130,8 @@ def _split_memories(user: str, dry_run: bool, report: list[str]) -> None:
             f"  memory split: {len(insights)} insights, {len(ephemeral)} ephemeral"
         )
         if not dry_run:
-            _atomic_write_json(insights_dst, {"insights": insights})
-            _atomic_write_json(ephemeral_dst, {"items": ephemeral})
+            atomic_write_json(insights_dst, {"insights": insights})
+            atomic_write_json(ephemeral_dst, {"items": ephemeral})
 
     # Always ensure an empty feedback.json exists.
     feedback_dst = feedback_path(user)
@@ -156,7 +140,7 @@ def _split_memories(user: str, dry_run: bool, report: list[str]) -> None:
     elif dry_run:
         report.append(f"  WOULD create empty feedback.json -> {feedback_dst}")
     else:
-        _atomic_write_json(feedback_dst, {"items": []})
+        atomic_write_json(feedback_dst, {"items": []})
         report.append(f"  created empty feedback.json -> {feedback_dst}")
 
 

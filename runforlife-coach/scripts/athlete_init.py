@@ -11,14 +11,12 @@ Run from the repo root with:
 """
 
 import argparse
-import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from runforlife.storage.athlete_memory import atomic_write_json  # noqa: E402
 from runforlife.storage.paths import (  # noqa: E402
     athlete_dir,
     ephemeral_path,
@@ -40,25 +38,11 @@ def _template_profile(user: str) -> dict:
     }
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
-    """Write JSON atomically: temp file in the same dir + os.replace."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-        os.replace(tmp_name, path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
-
-
 def _seed(path: Path, data: dict, label: str) -> None:
     if path.exists():
         print(f"  skip {label}: already exists")
         return
-    _atomic_write_json(path, data)
+    atomic_write_json(path, data)
     print(f"  created {label} -> {path}")
 
 

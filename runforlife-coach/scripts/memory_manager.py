@@ -23,15 +23,14 @@ Categories: insights | ephemeral | feedback
 
 import argparse
 import json
-import os
 import sys
-import tempfile
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from runforlife.storage import athlete_memory  # noqa: E402
+from runforlife.storage.athlete_memory import atomic_write_json  # noqa: E402
 from runforlife.storage.paths import (  # noqa: E402
     ephemeral_path,
     feedback_path,
@@ -83,19 +82,6 @@ def _cmd_show(user: str, category: str) -> None:
     _print_records(category, records)
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-        os.replace(tmp_name, path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
-
-
 def _cmd_delete(user: str, category: str, record_id: int) -> None:
     path = _PATH_FOR[category](user)
     key = _ENVELOPE_KEY[category]
@@ -109,7 +95,7 @@ def _cmd_delete(user: str, category: str, record_id: int) -> None:
         print(f"No {category} record with id {record_id}.")
         return
     data[key] = kept
-    _atomic_write_json(path, data)
+    atomic_write_json(path, data)
     print(f"Deleted {category} id {record_id}.")
 
 

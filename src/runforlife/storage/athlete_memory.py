@@ -28,8 +28,14 @@ from runforlife.storage.paths import (
 )
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
-    """Write JSON atomically: temp file in the same dir + os.replace."""
+def atomic_write_json(path: Path, data: dict) -> None:
+    """Write JSON atomically: temp file in the same dir + fsync + os.replace.
+
+    The fsync flushes the temp file's bytes to disk before the rename, so a
+    crash mid-write can never leave a half-written or corrupt target file.
+    This is the canonical implementation; scripts should import it rather than
+    keeping their own (fsync-less) copies.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
@@ -43,6 +49,10 @@ def _atomic_write_json(path: Path, data: dict) -> None:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
         raise
+
+
+# Backwards-compatible private alias for in-module callers.
+_atomic_write_json = atomic_write_json
 
 
 def _load_envelope(path: Path, key: str) -> dict:

@@ -9,11 +9,63 @@ block, custom date range aggregations.
 Safety: only SELECT statements are permitted.
 """
 
+import re
 import sqlite3
 from typing import Any
 
 from runforlife.skills.base import Skill
 from runforlife.storage.paths import metrics_db_path
+
+# Statements a read-only query may legitimately start with.
+_READ_ONLY_PREFIXES = ("SELECT", "WITH")
+# Write/DDL keywords that must never appear as a statement verb — even when
+# hidden behind a CTE ("WITH x AS (...) DELETE ...").
+_WRITE_KEYWORDS = (
+    "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
+    "REPLACE", "TRUNCATE", "ATTACH", "DETACH", "PRAGMA",
+    "REINDEX", "VACUUM", "GRANT", "REVOKE", "MERGE", "UPSERT",
+)
+
+
+def _strip_sql_comments(sql: str) -> str:
+    """Remove -- line comments and /* */ block comments."""
+    sql = re.sub(r"--[^\n]*", " ", sql)
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
+    return sql
+
+
+def _is_read_only(sql: str) -> tuple[bool, str]:
+    """Return (ok, reason). Allows a single SELECT or WITH...SELECT statement.
+
+    Rejects:
+      - multi-statement payloads ("SELECT 1; DROP TABLE x")
+      - CTE-wrapped writes ("WITH x AS (...) DELETE ...")
+      - any statement whose verb is a write/DDL keyword
+    Allows a single trailing semicolon (a lone read-only statement).
+    """
+    cleaned = _strip_sql_comments(sql).strip()
+    if not cleaned:
+        return False, "Empty query."
+
+    # Reject multi-statement payloads. A single trailing ';' is fine; any
+    # non-empty content after a ';' means a second statement.
+    without_trailing = cleaned.rstrip(";").strip()
+    if ";" in without_trailing:
+        return False, "Only a single SELECT statement is permitted (no ';')."
+
+    upper = without_trailing.upper()
+    first_word = re.match(r"\s*([A-Z_]+)", upper)
+    if not first_word or first_word.group(1) not in _READ_ONLY_PREFIXES:
+        return False, "Only SELECT queries are permitted."
+
+    # Even a WITH/SELECT prefix can hide a write verb after the CTE body, e.g.
+    # "WITH x AS (...) DELETE ...". Reject any write keyword that appears as a
+    # standalone word anywhere in the statement.
+    for keyword in _WRITE_KEYWORDS:
+        if re.search(rf"\b{keyword}\b", upper):
+            return False, "Only SELECT queries are permitted (write keyword found)."
+
+    return True, ""
 
 _SCHEMA_HINT = """\
 Table: daily_metrics
@@ -63,8 +115,9 @@ class RunSQL(Skill):
         user: str = kwargs["user"]
         sql: str = kwargs["sql"].strip()
 
-        if not sql.upper().lstrip("( \n\t").startswith("SELECT"):
-            return {"success": False, "error": "Only SELECT queries are permitted."}
+        ok, reason = _is_read_only(sql)
+        if not ok:
+            return {"success": False, "error": reason}
 
         db_path = metrics_db_path(user)
         if not db_path.exists():
