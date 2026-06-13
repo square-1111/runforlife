@@ -55,6 +55,8 @@ class DailyDocument:
     run_avg_pace_sec_per_km: float | None = None
     run_avg_hr: int | None = None
     training_effect_aerobic: float | None = None
+    run_is_indoor: bool | None = None       # True = treadmill/indoor (pace not heat-confounded)
+    run_temp_c: float | None = None          # avg ambient temp °C during the run (heat normalization)
 
     # --- Fitness ---
     vo2_max: float | None = None            # ml/kg/min — Garmin estimate
@@ -100,6 +102,8 @@ class DailyDocument:
             "run_avg_pace_sec_per_km":  self.run_avg_pace_sec_per_km,
             "run_avg_hr":               self.run_avg_hr,
             "training_effect_aerobic":  self.training_effect_aerobic,
+            "run_is_indoor":            None if self.run_is_indoor is None else int(self.run_is_indoor),
+            "run_temp_c":               self.run_temp_c,
             "vo2_max":                  self.vo2_max,
             "acwr":                     self.acwr,
             "hrv_7d_slope":             self.hrv_7d_slope,

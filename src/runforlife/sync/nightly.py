@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 
 from runforlife.config import USERS
 from runforlife.skills.data.garmin_auth import GarminAuth
-from runforlife.storage.metrics_store import count_days, has_day
+from runforlife.storage.metrics_store import count_days, has_complete_day
 from runforlife.sync.ingest import ingest_day
 
 _AUTH_SKILL = GarminAuth()
@@ -60,7 +60,11 @@ def sync_user(user: str, start_date: str, end_date: str, force: bool = False) ->
     while current <= end:
         date_str = current.isoformat()
 
-        if has_day(user, date_str) and not force:
+        # Skip only days that are already COMPLETE. An incomplete/skeleton row
+        # (left by a subjective check-in or a partial fetch) falls through and
+        # gets re-ingested — the gap-row fix that previously needed a manual
+        # --resync to recover hidden runs.
+        if has_complete_day(user, date_str) and not force:
             skip_count += 1
             current += timedelta(days=1)
             continue

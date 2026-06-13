@@ -76,6 +76,9 @@ _MIGRATION_COLUMNS = [
     ("active_calories",       "INTEGER"),
     # Fitness
     ("vo2_max",               "REAL"),
+    # Run environment (heat / treadmill confounders for pace & EF analytics)
+    ("run_is_indoor",         "INTEGER"),
+    ("run_temp_c",            "REAL"),
 ]
 
 
@@ -101,14 +104,25 @@ def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
 
 
 def upsert_day(user: str, doc: "DailyDocument") -> None:
-    """Insert or replace a day's metrics row."""
+    """Insert or update a day's metrics row.
+
+    Uses an UPSERT scoped to the columns the document actually owns (Garmin +
+    computed features). Columns NOT in to_row() — the manually-entered
+    subjective_readiness / life_context_note / session_rpe — are left untouched
+    on conflict. This is deliberate: the old INSERT OR REPLACE deleted the whole
+    row and re-inserted, silently wiping subjective check-ins on every --resync.
+    """
     row = doc.to_row()
     cols = list(row.keys())
     col_names = ", ".join(cols)
     placeholders = ", ".join("?" * len(cols))
+    # On conflict, update every owned column except the primary key.
+    update_cols = [c for c in cols if c not in ("user_id", "date")]
+    update_clause = ", ".join(f"{c} = excluded.{c}" for c in update_cols)
     with _conn(user) as conn:
         conn.execute(
-            f"INSERT OR REPLACE INTO daily_metrics ({col_names}) VALUES ({placeholders})",
+            f"INSERT INTO daily_metrics ({col_names}) VALUES ({placeholders}) "
+            f"ON CONFLICT(user_id, date) DO UPDATE SET {update_clause}",
             [row[c] for c in cols],
         )
         conn.commit()
@@ -145,13 +159,47 @@ def get_window(user: str, end_date: str, days: int) -> list[dict]:
 
 
 def has_day(user: str, date: str) -> bool:
-    """Check whether a row exists for this date."""
+    """Check whether a row exists for this date (existence only)."""
     with _conn(user) as conn:
         row = conn.execute(
             "SELECT 1 FROM daily_metrics WHERE user_id = ? AND date = ?",
             (user, date),
         ).fetchone()
     return row is not None
+
+
+# Garmin-sourced signals that prove a day was actually synced (not a skeleton
+# row left behind by a subjective check-in or a partial/failed fetch). If a row
+# exists but ALL of these are NULL/absent, it's incomplete and must be re-ingested.
+_COMPLETENESS_SIGNALS = (
+    "resting_hr",
+    "sleep_duration_min",
+    "hrv_last_night",
+    "steps",
+    "body_battery_morning",
+)
+
+
+def has_complete_day(user: str, date: str) -> bool:
+    """Whether this date has a row with real Garmin data (not a skeleton).
+
+    Returns False when no row exists OR the row is a skeleton (all completeness
+    signals NULL and no run logged) — the case the old existence-only `has_day`
+    skip check kept skipping forever, permanently hiding real runs. The nightly
+    skip path uses this so incomplete rows get re-ingested automatically.
+    """
+    signal_cols = ", ".join(_COMPLETENESS_SIGNALS)
+    with _conn(user) as conn:
+        row = conn.execute(
+            f"SELECT ran_today, {signal_cols} FROM daily_metrics "
+            "WHERE user_id = ? AND date = ?",
+            (user, date),
+        ).fetchone()
+    if row is None:
+        return False
+    if row["ran_today"]:
+        return True
+    return any(row[col] is not None for col in _COMPLETENESS_SIGNALS)
 
 
 def get_recent(user: str, n: int = 30) -> list[dict]:

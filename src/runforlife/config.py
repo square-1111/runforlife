@@ -4,6 +4,7 @@ Central configuration for RunForLife.
 Keep all magic numbers, paths, and model names here.
 """
 
+import os
 from pathlib import Path
 
 # Project root = src/runforlife/../../../  (three parents up from this file)
@@ -15,8 +16,10 @@ DATA_DIR = _PROJECT_ROOT / "data"
 # Auth tokens (already exists)
 TOKENS_DIR = _PROJECT_ROOT / "tokens"
 
-# Athlete data root — all per-athlete data lives here (outside the repo, never committed)
-RUNFORLIFE_HOME = Path.home() / ".runforlife"
+# Athlete data root — all per-athlete data lives here (outside the repo, never committed).
+# Overridable via RUNFORLIFE_HOME so tests and agents can sandbox to a throwaway dir
+# instead of touching the real ~/.runforlife (the 2026-06 data-loss failure class).
+RUNFORLIFE_HOME = Path(os.environ.get("RUNFORLIFE_HOME") or (Path.home() / ".runforlife"))
 
 # Supported users
 USERS = ("tezuesh", "kakul")

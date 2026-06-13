@@ -48,6 +48,21 @@ def _time_from_local_ts(ts) -> str | None:
         return None
 
 
+def _run_temp_c(activity: dict) -> float | None:
+    """Ambient temperature (°C) for a run, averaged from Garmin min/max if present.
+
+    Garmin reports minTemperature/maxTemperature on outdoor activities (and the
+    indoor room temp on treadmill runs). Returns the midpoint, or whichever bound
+    is available, or None when the device logged no temperature.
+    """
+    lo = activity.get("minTemperature")
+    hi = activity.get("maxTemperature")
+    vals = [v for v in (lo, hi) if isinstance(v, (int, float))]
+    if not vals:
+        return None
+    return round(sum(vals) / len(vals), 1)
+
+
 def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
     """Map raw collector output to a DailyDocument (no feature computation)."""
     doc = DailyDocument(user=user, date=date)
@@ -136,6 +151,12 @@ def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
             avg_hr = main_run.get("averageHR")
             doc.run_avg_hr = round(avg_hr) if avg_hr else None
             doc.training_effect_aerobic = main_run.get("aerobicTrainingEffect")
+
+            # Environment: treadmill/indoor vs outdoor, and ambient temperature.
+            # Both unconfound pace/EF trends (treadmill pace ≠ outdoor; heat tax).
+            type_key = (main_run.get("activityType", {}) or {}).get("typeKey", "").lower()
+            doc.run_is_indoor = ("treadmill" in type_key) or ("indoor" in type_key)
+            doc.run_temp_c = _run_temp_c(main_run)
 
     # ── VO2max ───────────────────────────────────────────────────────────────
     vo2_raw = raw.get("vo2max")
