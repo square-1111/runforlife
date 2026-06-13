@@ -7,7 +7,6 @@ They're seeded with known facts and can be updated as we learn more.
 
 import json
 from datetime import date
-from pathlib import Path
 
 from runforlife.storage.paths import profile_path
 
@@ -93,6 +92,28 @@ def load_profile(user: str) -> dict:
 def save_profile(user: str, profile: dict) -> None:
     path = profile_path(user)
     path.write_text(json.dumps(profile, indent=2))
+
+
+def get_hyrox_stations(user: str) -> dict:
+    """Return the per-station Hyrox targets/PBs map, or {} if unset.
+
+    The hyrox goal MAY carry an optional "stations" map, e.g.::
+
+        "hyrox": {
+            "category": "Mixed Doubles",
+            "stations": {
+                "ski_erg":  {"target_sec": 220, "pb_sec": 235},
+                "sled_push": {"target_sec": 90},
+                ...
+            }
+        }
+
+    This is intentionally NOT seeded — no real profile.json is written here.
+    A future Hyrox specialist can populate it via save_profile and read it back
+    through this safe accessor (missing keys yield {} rather than raising).
+    """
+    profile = load_profile(user)
+    return profile.get("goals", {}).get("hyrox", {}).get("stations", {})
 
 
 def build_system_prompt(user: str, memories: list[str] | None = None, inject_memories: bool = True) -> str:

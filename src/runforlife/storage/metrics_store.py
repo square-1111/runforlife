@@ -46,6 +46,32 @@ CREATE INDEX IF NOT EXISTS idx_daily_metrics_user_date
 ON daily_metrics (user_id, date)
 """
 
+# Non-running activities (strength_training, SkiErg, sled, HIIT, cycling, …).
+# The daily_metrics table is run-centric and silently drops these, hiding all
+# Hyrox / strength load. This sibling table captures them WITHOUT touching the
+# existing running aggregation. Keyed by (user_id, date, activity_type, start)
+# so the same session re-ingested on a --resync updates rather than duplicates.
+_CREATE_ACTIVITY_SESSIONS = """\
+CREATE TABLE IF NOT EXISTS activity_sessions (
+    user_id        TEXT    NOT NULL,
+    date           TEXT    NOT NULL,
+    activity_type  TEXT    NOT NULL,
+    start          TEXT    NOT NULL,
+    duration_min   REAL,
+    avg_hr         INTEGER,
+    max_hr         INTEGER,
+    training_load  REAL,
+    distance_km    REAL,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date, activity_type, start)
+)
+"""
+
+_CREATE_ACTIVITY_SESSIONS_INDEX = """\
+CREATE INDEX IF NOT EXISTS idx_activity_sessions_user_date
+ON activity_sessions (user_id, date)
+"""
+
 # All columns added after initial schema — migrated safely via ALTER TABLE
 _MIGRATION_COLUMNS = [
     # Subjective check-in (added first)
@@ -94,6 +120,8 @@ def _conn(user: str) -> Generator[sqlite3.Connection, None, None]:
     try:
         conn.execute(_CREATE_TABLE)
         conn.execute(_CREATE_INDEX)
+        conn.execute(_CREATE_ACTIVITY_SESSIONS)
+        conn.execute(_CREATE_ACTIVITY_SESSIONS_INDEX)
         for col, defn in _MIGRATION_COLUMNS:
             try:
                 conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN {col} {defn}")
@@ -257,3 +285,62 @@ def has_checkin_today(user: str, date: str) -> bool:
             (user, date),
         ).fetchone()
     return row is not None and row[0] is not None
+
+
+# --- activity_sessions: non-running activities (strength, Hyrox, cycling) ----
+
+def upsert_activity_session(
+    user: str,
+    date: str,
+    activity_type: str,
+    start: str,
+    duration_min: float | None = None,
+    avg_hr: int | None = None,
+    max_hr: int | None = None,
+    training_load: float | None = None,
+    distance_km: float | None = None,
+) -> None:
+    """Insert or update one non-running activity session.
+
+    Keyed by (user_id, date, activity_type, start). Re-ingesting the same
+    session (e.g. on a --resync) refreshes its values rather than duplicating.
+    This is a SEPARATE table from daily_metrics: it never touches the run_*
+    fields or the daily wellness row.
+    """
+    with _conn(user) as conn:
+        conn.execute(
+            """
+            INSERT INTO activity_sessions
+                (user_id, date, activity_type, start,
+                 duration_min, avg_hr, max_hr, training_load, distance_km)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, date, activity_type, start) DO UPDATE SET
+                duration_min  = excluded.duration_min,
+                avg_hr        = excluded.avg_hr,
+                max_hr        = excluded.max_hr,
+                training_load = excluded.training_load,
+                distance_km   = excluded.distance_km
+            """,
+            (user, date, activity_type, start,
+             duration_min, avg_hr, max_hr, training_load, distance_km),
+        )
+        conn.commit()
+
+
+def get_activity_sessions(user: str, start_date: str, end_date: str) -> list[dict]:
+    """Return non-running activity sessions in [start_date, end_date], oldest-first.
+
+    Read-only friendly: callers (a future Hyrox/strength specialist) can read
+    strength / SkiErg / sled / HIIT / cycling load without disturbing the run
+    aggregation in daily_metrics.
+    """
+    with _conn(user) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM activity_sessions
+            WHERE user_id = ? AND date >= ? AND date <= ?
+            ORDER BY date ASC, start ASC
+            """,
+            (user, start_date, end_date),
+        ).fetchall()
+    return [dict(r) for r in rows]

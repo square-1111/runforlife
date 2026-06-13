@@ -16,7 +16,11 @@ from runforlife.rag.features import (
     efficiency_factor,
     linear_slope,
 )
-from runforlife.storage.metrics_store import get_window, upsert_day
+from runforlife.storage.metrics_store import (
+    get_window,
+    upsert_activity_session,
+    upsert_day,
+)
 from runforlife.sync.collector import SOURCE_KEYS, collect_day
 
 
@@ -65,6 +69,44 @@ def _run_temp_c(activity: dict) -> float | None:
     if not vals:
         return None
     return round(sum(vals) / len(vals), 1)
+
+
+def _is_running(activity: dict) -> bool:
+    """Whether a Garmin activity counts as a run (same test the run agg uses)."""
+    type_key = (activity.get("activityType", {}) or {}).get("typeKey", "")
+    return "running" in type_key.lower()
+
+
+def _persist_activity_sessions(user: str, date: str, activities: list) -> None:
+    """Persist every NON-running activity to the activity_sessions table.
+
+    Strength / SkiErg / sled / HIIT / cycling are dropped by the run-centric
+    daily_metrics aggregation. Capture them here without touching run_* fields.
+    Running activities are deliberately skipped — they live in daily_metrics.
+    """
+    for a in activities:
+        if not isinstance(a, dict) or _is_running(a):
+            continue
+        type_key = (a.get("activityType", {}) or {}).get("typeKey")
+        if not type_key:
+            continue  # can't key a session without a type
+
+        dur_sec = a.get("duration")
+        duration_min = round(dur_sec / 60, 1) if dur_sec else None
+        avg_hr = a.get("averageHR")
+        max_hr = a.get("maxHR")
+        dist_m = a.get("distance")
+        upsert_activity_session(
+            user,
+            date=date,
+            activity_type=type_key,
+            start=a.get("startTimeLocal") or "",
+            duration_min=duration_min,
+            avg_hr=round(avg_hr) if avg_hr else None,
+            max_hr=round(max_hr) if max_hr else None,
+            training_load=a.get("activityTrainingLoad"),
+            distance_km=round(dist_m / 1000, 2) if dist_m else None,
+        )
 
 
 def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
@@ -166,6 +208,11 @@ def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
             doc.run_efficiency_factor = efficiency_factor(
                 doc.run_avg_pace_sec_per_km, doc.run_avg_hr
             )
+
+        # Capture non-running activities (strength, Hyrox stations, cycling…)
+        # into the sibling activity_sessions table. This is separate from the
+        # run aggregation above and leaves run_* / daily_metrics untouched.
+        _persist_activity_sessions(user, date, activities)
 
     # ── VO2max ───────────────────────────────────────────────────────────────
     vo2_raw = raw.get("vo2max")
