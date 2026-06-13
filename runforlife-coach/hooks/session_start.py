@@ -181,6 +181,25 @@ def _precompute_and_cache(athlete: str) -> None:
         print(f"(warning: could not write session cache: {exc})")
 
 
+def _emit_anomaly_heads_up(athlete: str) -> None:
+    """Proactively surface firing recovery anomalies as a concise heads-up.
+
+    The coach is otherwise reactive — it only flags RHR/HRV/sleep problems when
+    asked. This appends a single "Heads-up" line when any anomaly fires so every
+    session LEADS with the recovery picture. Prints nothing when all clear, and
+    fails open: any error → no heads-up, never breaks session start.
+    """
+    try:
+        from runforlife.skills.analysis.recovery_anomalies import collect_anomalies
+
+        flags = collect_anomalies(athlete)
+        if flags:
+            print("\n## Heads-up")
+            print("- " + "; ".join(flags))
+    except Exception as exc:  # noqa: BLE001 - never crash the session
+        print(f"(warning: could not compute recovery anomalies: {exc})")
+
+
 def _emit_coaching_style(athlete: str) -> None:
     """Append the learned coaching-style block when the model is confident.
 
@@ -233,6 +252,9 @@ def _emit_context(athlete: str) -> None:
 
     # Precompute + cache readiness/Banister and surface one-liners (best-effort).
     _precompute_and_cache(athlete)
+
+    # Proactively surface any firing recovery anomalies (best-effort, fail-open).
+    _emit_anomaly_heads_up(athlete)
 
     # Append the learned coaching-style block when confident (best-effort).
     _emit_coaching_style(athlete)
