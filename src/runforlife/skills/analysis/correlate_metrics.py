@@ -25,6 +25,11 @@ AVAILABLE_METRICS = [
     "body_battery_end",
     "acwr",
     "run_distance_km",
+    "run_avg_pace_sec_per_km",
+    "run_avg_hr",
+    "vo2_max",
+    "training_effect_aerobic",
+    "run_efficiency_factor",
     "hrv_7d_slope",
     "sleep_efficiency_delta",
 ]

@@ -12,6 +12,11 @@ athlete_memory API. Usage (from the repo root):
     uv run python runforlife-coach/scripts/memory_manager.py --user <name> --add-feedback \
         --advice-type deload --advice "Skip Push, easy 3km" --rating positive \
         --adherence followed --outcome "felt fresh next day, HRV up"
+    uv run python runforlife-coach/scripts/memory_manager.py --user <name> --add-insight \
+        --insight "Responds well to back-to-back easy days after races" \
+        --insight-type recovery --confidence 0.7
+    uv run python runforlife-coach/scripts/memory_manager.py --user <name> --add-ephemeral \
+        --content "Travelling Mon-Fri, treadmill only" --expires-on 2026-06-20
 
 Categories: insights | ephemeral | feedback
 """
@@ -21,6 +26,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -138,6 +144,51 @@ def _cmd_add_feedback(
     print(f"Recorded feedback id {new_id} for {user} (advice_type={advice_type}, rating={rating}).")
 
 
+def _cmd_add_insight(
+    user: str,
+    insight: str,
+    insight_type: str,
+    confidence: float,
+) -> None:
+    """Append one learned insight via athlete_memory.add_insight.
+
+    Insights are the long-lived, high-confidence things the coach has learned
+    about an athlete (e.g. "responds well to back-to-back easy days"). They flow
+    through the same atomic-write, auto-incrementing-id path as feedback into
+    insights.json, which the coach reads to stay grounded.
+    """
+    new_id = athlete_memory.add_insight(
+        user,
+        insight=insight,
+        type=insight_type,
+        confidence=confidence,
+    )
+    print(
+        f"Recorded insight id {new_id} for {user} "
+        f"(type={insight_type}, confidence={confidence})."
+    )
+
+
+def _cmd_add_ephemeral(
+    user: str,
+    content: str,
+    expires_on: str | None,
+) -> None:
+    """Append one short-lived context item via athlete_memory.add_ephemeral.
+
+    Ephemeral items capture transient reality — injury, travel, a life event, a
+    supplement change — with an optional expiry so stale context auto-drops out
+    of advice (and /switch's prune sweeps it). Returns the new item's id.
+    """
+    new_id = athlete_memory.add_ephemeral(
+        user,
+        content=content,
+        expires_on=expires_on,
+    )
+    expiry = expires_on if expires_on else "no expiry"
+    print(f"Recorded ephemeral id {new_id} for {user} ({expiry}).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Manage an athlete's memory files.")
     parser.add_argument("--user", required=True, help="Athlete name.")
@@ -153,12 +204,28 @@ def main() -> None:
                        help="Record one coaching-feedback item (capture step for "
                             "/reflect). Requires --advice-type, --advice, --rating; "
                             "--adherence and --outcome are optional.")
+    group.add_argument("--add-insight", action="store_true",
+                       help="Record one learned insight about the athlete. Requires "
+                            "--insight and --insight-type; --confidence is optional "
+                            "(default 0.5).")
+    group.add_argument("--add-ephemeral", action="store_true",
+                       help="Record one short-lived context item (injury, travel, life "
+                            "event, supplement change). Requires --content; --expires-on "
+                            "(YYYY-MM-DD) is optional.")
     # Field values for --add-feedback (ignored by the other actions).
     parser.add_argument("--advice-type", help="Category, e.g. 'rest_day', 'tempo', 'deload'.")
     parser.add_argument("--advice", help="The advice that was given (short text).")
     parser.add_argument("--rating", help="How it landed, e.g. 'positive' | 'neutral' | 'negative'.")
     parser.add_argument("--adherence", help="Optional: 'followed' | 'partial' | 'ignored'.")
     parser.add_argument("--outcome", help="Optional: what actually happened afterward.")
+    # Field values for --add-insight.
+    parser.add_argument("--insight", help="The insight text (what was learned).")
+    parser.add_argument("--insight-type", help="Insight category, e.g. 'recovery', 'pacing'.")
+    parser.add_argument("--confidence", type=float, default=0.5,
+                        help="Optional: confidence 0.0-1.0 (default 0.5).")
+    # Field values for --add-ephemeral.
+    parser.add_argument("--content", help="The short-lived context item (short text).")
+    parser.add_argument("--expires-on", help="Optional: expiry date as YYYY-MM-DD.")
     args = parser.parse_args()
 
     if args.list:
@@ -194,6 +261,35 @@ def main() -> None:
             args.rating,
             args.adherence,
             args.outcome,
+        )
+    elif args.add_insight:
+        missing = [
+            flag for flag, value in (
+                ("--insight", args.insight),
+                ("--insight-type", args.insight_type),
+            )
+            if not value
+        ]
+        if missing:
+            parser.error("--add-insight requires " + ", ".join(missing))
+        _cmd_add_insight(
+            args.user,
+            args.insight,
+            args.insight_type,
+            args.confidence,
+        )
+    elif args.add_ephemeral:
+        if not args.content:
+            parser.error("--add-ephemeral requires --content")
+        if args.expires_on is not None:
+            try:
+                date.fromisoformat(args.expires_on)
+            except ValueError:
+                parser.error("--expires-on must be a valid date in YYYY-MM-DD format")
+        _cmd_add_ephemeral(
+            args.user,
+            args.content,
+            args.expires_on,
         )
 
 

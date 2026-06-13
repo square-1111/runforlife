@@ -67,13 +67,36 @@ Only continue past this step if the DB has rows.
 
 ### 4a. Days remaining to each race
 
+This block is robust to absent goals and past races. If a goal's block or its `race_date` is missing
+(or unparseable), that goal is skipped cleanly and its fields come back `null`. If the race date is
+already in the past, the fields are the string `"passed"` instead of a misleading negative countdown.
+The output shape is stable — `hm_days`, `hm_weeks`, `hyrox_days`, `hyrox_weeks` are always present
+(`null` or `"passed"` when not applicable) — so the later steps that consume it never KeyError.
+
 ```bash
-python3 -c "import datetime,json,pathlib; \
-p=json.load(open(pathlib.Path.home()/'.runforlife/athletes/<athlete>/profile.json')); \
-g=p['goals']; today=datetime.date.today(); \
-hm=datetime.date.fromisoformat(g['half_marathon']['race_date']); \
-hy=datetime.date.fromisoformat(g['hyrox']['race_date']); \
-print(json.dumps({'today':str(today),'hm_days':(hm-today).days,'hm_weeks':round((hm-today).days/7,1),'hyrox_days':(hy-today).days,'hyrox_weeks':round((hy-today).days/7,1)}))"
+python3 -c "
+import datetime, json, pathlib
+p = json.load(open(pathlib.Path.home()/'.runforlife/athletes/<athlete>/profile.json'))
+goals = p.get('goals') or {}
+today = datetime.date.today()
+
+def days_for(block):
+    rd = (block or {}).get('race_date')
+    if not rd:
+        return None, None
+    try:
+        d = datetime.date.fromisoformat(rd)
+    except (ValueError, TypeError):
+        return None, None
+    n = (d - today).days
+    if n < 0:
+        return 'passed', 'passed'
+    return n, round(n / 7, 1)
+
+hm_days, hm_weeks = days_for(goals.get('half_marathon'))
+hyrox_days, hyrox_weeks = days_for(goals.get('hyrox'))
+print(json.dumps({'today': str(today), 'hm_days': hm_days, 'hm_weeks': hm_weeks, 'hyrox_days': hyrox_days, 'hyrox_weeks': hyrox_weeks}))
+"
 ```
 
 ### 4b. 300-day run-days pace (days run this year vs. target-for-today)
