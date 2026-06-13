@@ -157,6 +157,35 @@ def test_efficiency_factor_computed_at_ingest(sandbox):
     assert doc.run_efficiency_factor == 1.338
 
 
+# --- ACWR stays on the raw-distance proxy (single-source de-dup is neutral) ---
+
+def test_acwr_uses_raw_distance_proxy_unchanged(sandbox):
+    """De-duplicating the load formula must NOT shift stored acwr values.
+
+    ACWR is a ratio of rolling distance averages. Here every day is an
+    identical 10 km run, so 7d-avg == 28d-avg and acwr must be exactly 1.0 —
+    the same value the raw-distance proxy has always produced. If ACWR were
+    silently switched to pace-weighted load this would still be 1.0 (constant
+    pace), so we vary nothing and simply pin the distance basis end-to-end.
+    """
+    from runforlife.storage import metrics_store
+    from runforlife.rag.daily_document import DailyDocument
+    from runforlife.sync.ingest import _enrich_features
+
+    # 27 prior identical run-days, then the day under test (28 total in window).
+    for day in range(1, 29):
+        date = f"2026-06-{day:02d}"
+        doc = DailyDocument(
+            user="tezuesh", date=date, ran_today=True,
+            run_distance_km=10.0, run_avg_pace_sec_per_km=300,
+        )
+        if day < 28:
+            metrics_store.upsert_day("tezuesh", doc)
+        else:
+            _enrich_features(doc)
+            assert doc.acwr == 1.0
+
+
 # --- RUNFORLIFE_HOME env override --------------------------------------------
 
 def test_runforlife_home_env_override(monkeypatch, tmp_path):

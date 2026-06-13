@@ -15,7 +15,67 @@ Key features:
                Rising RHR with declining HRV = strong overtraining signal
 """
 
+from typing import NamedTuple
+
 import numpy as np
+
+# --- canonical daily training load -------------------------------------------
+#
+# Single source of truth for per-day training load. Both the Banister
+# fitness-fatigue model (banister.py) and any pace-weighted load consumer read
+# this so "load" is defined exactly once.
+#
+#   load = distance_km × intensity_factor × 10
+#   intensity_factor = max(0.5, 1 - (pace_sec_per_km - 240) / 360)
+#
+# Easy runs (~360 s/km) → factor ≈ 0.67; fast runs (~270 s/km) → factor ≈ 0.92.
+# This is the formula that has always lived in banister._daily_load; it is
+# reused verbatim here so existing CTL/ATL/TSB numbers do not shift.
+
+# Pace (s/km) assumed when a run has distance but no recorded pace. Matches the
+# historical Banister fallback so de-duplication is numerically neutral.
+PACELESS_FALLBACK_SEC_PER_KM = 360.0
+
+
+class DailyLoad(NamedTuple):
+    """Result of :func:`daily_load`.
+
+    value:     the training-load number (0.0 when there is no run).
+    estimated: True when pace was missing and a fallback pace was assumed, so
+               callers can flag the load as an estimate instead of silently
+               trusting a defaulted value.
+    """
+
+    value: float
+    estimated: bool
+
+
+def daily_load(
+    distance_km: float | None,
+    pace_sec_per_km: float | None,
+    avg_hr: float | None = None,
+) -> DailyLoad:
+    """Canonical per-day training load (pace-weighted distance).
+
+    Returns a :class:`DailyLoad` so the paceless case is a *flagged* estimate
+    rather than a silent default.
+
+    avg_hr is accepted for signature stability (a future HR-weighted variant /
+    Garmin Training Load could use it) but is intentionally unused today — we do
+    not invent an HR-based proxy from unstored data.
+
+    Examples:
+      daily_load(10, 240)  → load 100.0, estimated False  (intensity 1.0)
+      daily_load(10, 360)  → load  66.7, estimated False  (intensity ~0.667)
+      daily_load(10, None) → load  66.7, estimated True    (360 s/km assumed)
+    """
+    if not distance_km:
+        return DailyLoad(0.0, estimated=False)
+
+    estimated = not pace_sec_per_km
+    pace = pace_sec_per_km if pace_sec_per_km else PACELESS_FALLBACK_SEC_PER_KM
+    intensity = max(0.5, 1.0 - (pace - 240) / 360)
+    return DailyLoad(distance_km * intensity * 10, estimated=estimated)
 
 
 def linear_slope(values: list[float]) -> float | None:

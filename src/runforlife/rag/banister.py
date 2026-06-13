@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 
 from runforlife import config
+from runforlife.rag.features import daily_load
 from runforlife.storage.metrics_store import get_window
 
 
@@ -104,15 +105,19 @@ def compute_banister(user: str) -> BanisterState | None:
 
 
 def _daily_load(row: dict) -> float:
-    """Compute training load for one day. Returns 0 if no run."""
+    """Training load for one stored row. Returns 0 if no run.
+
+    Thin adapter over the canonical :func:`runforlife.rag.features.daily_load`
+    so the load formula lives in exactly one place. Numerically identical to the
+    previous inline formula (paceless runs still assume 360 s/km).
+    """
     if not row.get("ran_today"):
         return 0.0
-    dist = row.get("run_distance_km")
-    if not dist:
-        return 0.0
-    pace = row.get("run_avg_pace_sec_per_km") or 360
-    intensity = max(0.5, 1.0 - (pace - 240) / 360)
-    return dist * intensity * 10
+    return daily_load(
+        row.get("run_distance_km"),
+        row.get("run_avg_pace_sec_per_km"),
+        row.get("run_avg_hr"),
+    ).value
 
 
 def main() -> int:

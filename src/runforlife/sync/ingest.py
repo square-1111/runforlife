@@ -196,8 +196,15 @@ def _enrich_features(doc: DailyDocument) -> None:
         doc.sleep_score, [r.get("sleep_score") for r in rows_28]
     )
 
-    # ACWR: 7-day avg load / 28-day avg load
-    # Load proxy = run_distance_km (0 on rest days)
+    # ACWR: 7-day avg load / 28-day avg load.
+    #
+    # Load proxy = run_distance_km (0 on rest days) — the *distance-only* basis.
+    # This is deliberately NOT the pace-weighted features.daily_load() used by
+    # the Banister model: ACWR is a ratio of rolling averages, so pace-weighting
+    # every day would change every stored acwr value. Per the conservative
+    # single-source rule we keep the distance basis here and let banister own the
+    # pace-weighted definition. If ACWR ever moves to pace-weighted load, swap
+    # this line for features.daily_load(dist, pace).value and re-baseline.
     loads_28 = [r.get("run_distance_km") or 0.0 for r in rows_28]
     loads_7  = loads_28[-7:] if len(loads_28) >= 7 else loads_28
     avg_7  = sum(loads_7)  / len(loads_7)  if loads_7  else 0.0
