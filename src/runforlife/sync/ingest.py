@@ -11,9 +11,13 @@ Flow per date:
 """
 
 from runforlife.rag.daily_document import DailyDocument
-from runforlife.rag.features import compute_sleep_efficiency_delta, linear_slope
+from runforlife.rag.features import (
+    compute_sleep_efficiency_delta,
+    efficiency_factor,
+    linear_slope,
+)
 from runforlife.storage.metrics_store import get_window, upsert_day
-from runforlife.sync.collector import collect_day
+from runforlife.sync.collector import SOURCE_KEYS, collect_day
 
 
 def _pace_to_seconds(pace_str: str | None) -> float | None:
@@ -158,6 +162,11 @@ def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
             doc.run_is_indoor = ("treadmill" in type_key) or ("indoor" in type_key)
             doc.run_temp_c = _run_temp_c(main_run)
 
+            # Efficiency Factor (speed/HR) — aerobic-progress signal that raw pace hides.
+            doc.run_efficiency_factor = efficiency_factor(
+                doc.run_avg_pace_sec_per_km, doc.run_avg_hr
+            )
+
     # ── VO2max ───────────────────────────────────────────────────────────────
     vo2_raw = raw.get("vo2max")
     if isinstance(vo2_raw, list) and vo2_raw:
@@ -205,7 +214,10 @@ def ingest_day(user: str, date: str, delay_seconds: float = 0.3) -> DailyDocumen
     """
     raw = collect_day(user, date, delay_seconds=delay_seconds)
 
-    if not any(v is not None for v in raw.values()):
+    # Only the real data sources count toward "is there anything here" — ignore
+    # the _provenance map collect_day attaches. A day where every source errored
+    # or is empty produces no row (rather than a skeleton).
+    if not any(raw.get(k) is not None for k in SOURCE_KEYS):
         return None
 
     doc = _build_document(user, date, raw)

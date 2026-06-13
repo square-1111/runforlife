@@ -149,6 +149,14 @@ def test_env_fields_round_trip_through_db(sandbox):
     assert row["run_temp_c"] == 30.0
 
 
+def test_efficiency_factor_computed_at_ingest(sandbox):
+    from runforlife.sync.ingest import _build_document
+
+    # 5000 m at 2.899 m/s → 345 s/km; HR 130 → EF 1.338
+    doc = _build_document("tezuesh", "2026-06-09", _raw_with_run("running", speed=2.899, hr=130))
+    assert doc.run_efficiency_factor == 1.338
+
+
 # --- RUNFORLIFE_HOME env override --------------------------------------------
 
 def test_runforlife_home_env_override(monkeypatch, tmp_path):

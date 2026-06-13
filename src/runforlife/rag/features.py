@@ -59,6 +59,22 @@ def compute_acwr(acute_loads: list[float], chronic_loads: list[float]) -> float 
     return float(acute_avg / chronic_avg)
 
 
+def efficiency_factor(pace_sec_per_km: float | None, avg_hr: float | None) -> float | None:
+    """Running Efficiency Factor (Friel): speed in metres/minute ÷ average HR.
+
+    A pace-per-heartbeat measure of aerobic efficiency. Higher = fitter (more
+    distance per beat). Because it normalises pace by HR, it exposes fitness
+    gains that raw pace hides when the athlete holds effort down (e.g. heat,
+    base-building). Returns None if pace or HR is missing/invalid.
+
+    Example: 5:45/km (345 s) at HR 130 → 60000/345 / 130 ≈ 1.338.
+    """
+    if not pace_sec_per_km or not avg_hr or pace_sec_per_km <= 0 or avg_hr <= 0:
+        return None
+    meters_per_min = 60000.0 / pace_sec_per_km
+    return round(meters_per_min / avg_hr, 3)
+
+
 def compute_sleep_efficiency_delta(today_efficiency: float | None, baseline_window: list[float]) -> float | None:
     """
     Delta between today's sleep efficiency and the 28-day rolling baseline.

@@ -79,6 +79,8 @@ _MIGRATION_COLUMNS = [
     # Run environment (heat / treadmill confounders for pace & EF analytics)
     ("run_is_indoor",         "INTEGER"),
     ("run_temp_c",            "REAL"),
+    # Aerobic efficiency (speed/HR) — the base-builder's progress signal
+    ("run_efficiency_factor", "REAL"),
 ]
 
 

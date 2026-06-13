@@ -17,26 +17,45 @@ Call budget per day (was 7, now 5):
 Errors are soft — a missing metric produces None, not a crash.
 """
 
+import logging
 import time
 
 from runforlife.skills.data.garmin_auth import get_session
+
+logger = logging.getLogger(__name__)
+
+# The data sources fetched per day. Kept explicit so ingest can tell a real
+# "no data" day from one where every fetch errored, and so a provenance map can
+# be returned without polluting the source-key set.
+SOURCE_KEYS = ("sleep", "hrv", "summary", "activities", "vo2max")
 
 
 def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     """
     Collect all metrics for a single user/date.
 
-    Returns dict with keys: sleep, hrv, summary, activities, vo2max.
-    Each value is the raw API response dict, or None on error.
+    Returns dict with keys: sleep, hrv, summary, activities, vo2max — each the
+    raw API response dict, or None on error — plus a `_provenance` map
+    {source: "ok" | "empty" | "error:<Type>"} so a transient fetch failure is
+    distinguishable from a genuine rest/no-data day (previously both looked
+    identical, which is how partial fetches wrote skeleton rows silently).
     """
     garmin = get_session(user)
     results: dict = {}
+    provenance: dict[str, str] = {}
 
     def _fetch(key: str, fn, *args, **kwargs):
         try:
-            results[key] = fn(*args, **kwargs)
-        except Exception:
+            value = fn(*args, **kwargs)
+            results[key] = value
+            provenance[key] = "ok" if value is not None else "empty"
+        except Exception as e:  # noqa: BLE001 - soft-fail per source, but now LOGGED
             results[key] = None
+            provenance[key] = f"error:{type(e).__name__}"
+            logger.warning(
+                "collect_day soft-fail user=%s date=%s source=%s error=%s",
+                user, date, key, e,
+            )
         time.sleep(delay_seconds)
 
     _fetch("sleep",      garmin.get_sleep_data,          date)
@@ -45,4 +64,12 @@ def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     _fetch("activities", garmin.get_activities_by_date,  date, date)
     _fetch("vo2max",     garmin.get_max_metrics,         date)
 
+    errored = [k for k, v in provenance.items() if v.startswith("error")]
+    if errored:
+        logger.warning(
+            "collect_day user=%s date=%s INCOMPLETE — failed sources=%s",
+            user, date, errored,
+        )
+
+    results["_provenance"] = provenance
     return results

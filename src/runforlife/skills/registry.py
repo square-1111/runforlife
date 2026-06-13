@@ -60,6 +60,7 @@ from runforlife.skills.analysis.injury_risk import InjuryRisk
 from runforlife.skills.analysis.correlate_metrics import CorrelateMetrics
 from runforlife.skills.analysis.weekly_summary import WeeklySummary
 from runforlife.skills.analysis.training_trend import TrainingTrend
+from runforlife.skills.analysis.z2_pace_trend import Z2PaceTrend
 from runforlife.skills.analysis.run_streak import RunStreak
 from runforlife.skills.analysis.goal_progress import GoalProgress
 from runforlife.skills.analysis.run_sql import RunSQL
@@ -141,6 +142,7 @@ def create_default_registry() -> SkillRegistry:
     registry.register(CorrelateMetrics())
     registry.register(WeeklySummary())
     registry.register(TrainingTrend())
+    registry.register(Z2PaceTrend())
     registry.register(RunStreak())
     registry.register(GoalProgress())
     registry.register(RunSQL())
