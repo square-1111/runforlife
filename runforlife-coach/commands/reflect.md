@@ -29,7 +29,16 @@ If neither yields a valid athlete, **STOP** and reply: `No active athlete set. R
 cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/feedback_stats.py --user <athlete>
 ```
 
-This prints JSON: `{user, total_feedback, advice_types, by_advice_type: {<type>: {n, ratings:{...}, adherence:{...}, sample_outcomes:[...]}}}`.
+This prints JSON: `{user, total_feedback, advice_types, by_advice_type: {<type>: {n, ratings:{...},
+ratings_normalized:{positive,neutral,negative}, unrecognized_ratings:{...}, rated_n, success_rate,
+adherence:{...}, adherence_n, adherence_rate, sample_outcomes:[...]}}}`.
+
+`success_rate` is positives/(positives+negatives) — neutral and unrecognized ratings are excluded
+from the denominator, and it is `null` when there is no positive/negative signal. `adherence_rate`
+is a 0..1 score over rows with a known adherence value (`null` when none are known). Lean on these
+computed rates rather than re-deriving them from the raw `ratings` counts. If `unrecognized_ratings`
+is non-empty, the feedback was logged with off-enum rating words — note it, but don't let those rows
+drive a conclusion.
 
 Also read, for context:
 - `~/.runforlife/athletes/<athlete>/insights.json` — patterns already learned.
@@ -66,7 +75,35 @@ For each well-supported finding, propose ONE concrete change and **ask before ap
 Only edit a file after the user says yes. Apply approved edits with a precise, minimal change;
 re-show the result. If the user declines, leave the file untouched and note it for next time.
 
-## 6. Skill-gap detection (optional)
+## 6. PERSIST the approved learning as an insight (only after approval)
+
+The lesson behind an approved change should outlive this one session. **After — and only after — the
+user approves a finding in step 5**, persist the underlying learning as a durable insight so the
+coach carries it forward. This is the write the loop was missing: until now `/reflect` analyzed
+feedback but never recorded what it learned, so `insights.json` stayed empty.
+
+Run, with the same athlete name:
+
+```bash
+cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/memory_manager.py \
+  --user <athlete> --add-insight \
+  --insight "<one-line learning, tied to the numbers, e.g. 'tempo on Amber days succeeds (success_rate 0.83, n=6) — don't auto-downgrade'>" \
+  --insight-type <recovery|pacing|training|adherence|...> \
+  --confidence <0.0-1.0, scaled to how much data backs it>
+```
+
+Rules:
+- **Approval-gated, never automatic.** Do not write an insight for a finding the user declined or
+  deferred, and never write one off thin data (the step-3 thresholds still apply).
+- One insight per approved finding. Keep the text concrete and cite the rate (`success_rate` /
+  `adherence_rate`) and `n` it rests on.
+- Set `--confidence` from the evidence: small/borderline samples low (~0.4-0.5), strong repeated
+  signal higher (~0.7-0.8). Never 1.0.
+- This records what was learned; it does **not** change any rule or prompt on its own. The
+  conflict-rule / specialist edits from step 5 remain the only behavior changes, and they too are
+  approval-gated.
+
+## 7. Skill-gap detection (optional)
 
 Scan `insights.json`, recent `feedback.json`, and the conversation for **recurring questions or
 needs no current specialist covers** (e.g. repeated nutrition/fueling or strength-training
@@ -74,7 +111,8 @@ questions — the current specialists are recovery / training / race / analytics
 recurs (3+ times), propose adding a new specialist subagent (name + one-line scope) for the user to
 approve. Do not create it unprompted.
 
-## 7. Summarize
+## 8. Summarize
 
-End with: what the data showed, which edits were applied (with the athlete name), which were
-declined or deferred, and what to revisit next week. Keep it concrete and short.
+End with: what the data showed, which edits were applied (with the athlete name), which insights
+were persisted, which findings were declined or deferred, and what to revisit next week. Keep it
+concrete and short.
