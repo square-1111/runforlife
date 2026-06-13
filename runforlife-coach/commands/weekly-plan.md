@@ -90,10 +90,19 @@ inherit the athlete name).
    week should carry race-specific quality work or is a taper/recovery week. Pass the
    HM and Hyrox `race_date`s so it can compute weeks remaining.
 
+3. **strength-specialist** (call this ONLY when the athlete has a Hyrox goal in
+   `goals.hyrox`, or the week should carry strength/cross-training) — ask for: the
+   non-running session counts over the last 4 weeks by type, the Hyrox station
+   benchmarks vs targets (it will say plainly when none are on file — do not invent
+   them), and the next strength/station session to slot into the week. Pass the
+   Hyrox `race_date` so it can phase the station work. If there is no Hyrox goal,
+   skip it.
+
 If only consistency/base-building is in question and there is no near race, the
 race-specialist may be light — but still call it to confirm the phase. Pass the
-**active ephemeral constraints** from step 3 into both prompts so neither prescribes
-a hard session on a travel/injury day.
+**active ephemeral constraints** from step 3 into every prompt so none prescribes
+a hard session on a travel/injury day. Fan the specialists out **in parallel** —
+issue the Task calls in a single message so they run concurrently.
 
 ## 5. Build the 7-day plan (synthesize, within the safety rails)
 
@@ -112,6 +121,11 @@ Combine the specialists' numbers into one concrete week. Honor these rules:
 - **One long run**, placed on the athlete's preferred long-run day if known.
 - **Align to the goal phase** from the race-specialist (race-specific paces only in
   build/peak; easy aerobic + consistency in base; reduced volume in taper).
+- **Slot the strength/Hyrox work** from the strength-specialist (when it ran) onto
+  the right days — keep heavy lower-body/station work off hard-run days, and label
+  it in the plan (the "Run type" column may read `strength` or `Hyrox stations`).
+  If the strength-specialist reported no station benchmarks on file, carry that note
+  through — do not fabricate station targets.
 - **Respect active constraints** — travel days are easy/treadmill/rest; injury days
   are rest or cross-train, never quality.
 

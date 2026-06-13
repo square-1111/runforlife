@@ -102,8 +102,10 @@ session, or both pointing easy) — synthesize directly:
 If the two **genuinely conflict** (e.g. recovery says REST/EASY but training wants tempo/intervals),
 invoke the **`conflict-resolver`** subagent. Pass it explicitly: the athlete name, the recovery
 call + driving numbers (readiness score/tier, `conflict_detected`, key components, any active
-injury/illness), and the training prescription + its ACWR band and goal phase. It applies the
-editable priority ladder at
+injury/illness), the training prescription + its ACWR band and goal phase, and **any active
+`training_directives.intensity_cap`** from the profile (e.g. a `zone2_only` running cap with its
+`until` date) so the arbiter applies Rule 1.5 and never up-rates a Z2-capped athlete to intervals
+on a running session. It applies the editable priority ladder at
 `/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md` and returns ONE
 decision naming which rule fired. Use that decision as today's call, and name the winning rule in
 the rationale below.

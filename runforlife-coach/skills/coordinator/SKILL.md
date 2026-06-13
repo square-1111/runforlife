@@ -5,9 +5,9 @@ description: >-
   this whenever the user asks anything about their running/training, recovery,
   race goals, or metrics analysis (e.g. "how did I sleep?", "is my mileage too
   high?", "will I hit my sub-HM goal?", "should I run today?"). It picks the
-  active athlete, then delegates to the recovery, training, race, or analytics
-  specialist subagent (passing the athlete name explicitly), and synthesizes
-  cross-domain answers.
+  active athlete, then delegates to the recovery, training, race, strength, or
+  analytics specialist subagent (passing the athlete name explicitly), and
+  synthesizes cross-domain answers.
 ---
 
 # Coordinator — routing instructions
@@ -29,14 +29,23 @@ seen that banner this session, reuse that name instead of re-reading the file.
 
 ## Step 2 — Classify the question's domain(s)
 
-Match the question to one of four domains. Use the keyword cues below.
+Match the question to one of five domains. Use the keyword cues below.
 
 | Domain        | Cues |
 |---------------|------|
 | **recovery**  | sleep, HRV, body battery, stress, readiness, rest, recovery, fatigue, "am I recovered" |
 | **training**  | mileage, volume, weekly load, ACWR, intensity, HR zones, runs, workouts, consistency, streaks, "training too hard" |
 | **race**      | VO2max, race prediction, finish-time estimate, goal gap, pace targets, taper, "will I hit my goal", sub-HM, Hyrox target |
+| **strength**  | strength training, gym, lifting, Hyrox station(s), SkiErg, sled push/pull, burpees, wall balls, farmers carry, sandbag, rowing, HIIT, cross-training, "what strength/Hyrox session", station times/PBs |
 | **analytics** | correlations, "compare X vs Y", SQL/raw queries, "is there a relationship between two metrics", trends across metrics |
+
+> **race vs strength on Hyrox:** the **race-specialist** owns the Hyrox *goal-gap
+> and feasibility* (is the athlete on track for the Hyrox date, given running base
+> + strength). The **strength-specialist** owns the *station programming and
+> non-running load* (which station is off target, what strength/station session to
+> do next). A "will I hit my Hyrox goal?" question is race; a "what should my next
+> SkiErg/sled session be?" or "how are my station times?" question is strength. A
+> broad "get me Hyrox-ready" question is cross-domain — fan out to both.
 
 ## Step 3a — Single-domain question → ONE specialist
 
@@ -46,6 +55,7 @@ subagent via the Task/Agent tool:
 - recovery → `recovery-specialist`
 - training → `training-specialist`
 - race → `race-specialist`
+- strength → `strength-specialist`
 - analytics → `analytics-specialist`
 
 Subagents run in **isolated context** — they do NOT inherit the active athlete
@@ -77,8 +87,11 @@ Handle them with a real parallel fan-out:
    says REST/EASY but training wants tempo/intervals, or vice-versa), invoke the
    **`conflict-resolver`** subagent. Pass it, explicitly: the athlete name, the
    recovery call + its driving numbers (readiness score/tier, `conflict_detected`,
-   key components, any active injury/illness), and the training prescription + its
-   ACWR band and goal phase. It applies the editable priority ladder at
+   key components, any active injury/illness), the training prescription + its
+   ACWR band and goal phase, and **any active `training_directives.intensity_cap`**
+   from the profile (e.g. a `zone2_only` running cap with its `until` date) so the
+   arbiter applies Rule 1.5 and never up-rates a Z2-capped athlete to intervals on
+   a running session. It applies the editable priority ladder at
    `/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md`
    and returns ONE decision naming which rule fired.
 
@@ -117,8 +130,8 @@ invoke so they never conclude "no training" from an empty DB.
 
 ## Reminders
 
-- You route; specialists reason. Never answer recovery/training/race/analytics
-  questions yourself.
+- You route; specialists reason. Never answer
+  recovery/training/race/strength/analytics questions yourself.
 - Never do arithmetic — the specialists call Python scripts for that.
 - Always pass the athlete name explicitly to every subagent.
 - If a `## Coaching Style for This Athlete` block was injected this session, pass

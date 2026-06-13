@@ -1,7 +1,7 @@
 {
   "name": "runforlife-coach",
   "version": "0.1.0",
-  "description": "Multi-athlete AI running coach with recovery, training, race, and analytics specialist subagents for Garmin athletes.",
+  "description": "Multi-athlete AI running coach with recovery, training, race, strength/Hyrox, and analytics specialist subagents for Garmin athletes.",
   "author": {
     "name": "Tezuesh"
   }
