@@ -1,28 +1,38 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook for the RunForLife coach plugin (Phase 2) — athlete isolation guard.
+PreToolUse hook for the RunForLife coach plugin — athlete isolation guard.
 
-Goal: a Bash command issued while athlete X is active must never read or write
-athlete Y's data. A prior build agent destroyed real user data by mixing
-athletes; this guard is the structural defense against a repeat.
+Threat model (corrected): the operation that destroyed real data in 2026-06 was
+a cross-athlete *write* — touching athlete Y's files while athlete X is active.
+So this guard blocks cross-athlete WRITES and allows cross-athlete READS.
 
-Behavior (reads the PreToolUse JSON event from stdin):
-  1. If tool_name != "Bash" -> exit 0 (only Bash commands can touch data dirs).
-  2. Parse tool_input.command. Determine the active athlete from
-     ~/.runforlife/active_athlete.
-  3. Scan the command for references to a *known* athlete (by name token or by a
-     path under ~/.runforlife/athletes/<name>) or to a --user <name> CLI arg.
-  4. BLOCK (stderr reason + exit 2) when:
-       - the command references a known athlete that differs from the active one
-         (cross-athlete mismatch), OR
-       - no active athlete is set AND the command clearly touches athlete data.
-  5. Otherwise exit 0.
+Why allow reads? Reading another athlete's data (a SELECT, a `cat`, the plugin's
+own docs that merely mention a name) is harmless and is exactly what a two-person
+household needs — e.g. /compare reads both athletes. The earlier guard blocked
+all references (reads included), which walled off legitimate comparison while
+STILL leaving the real write path open via the Edit/Write tools and a
+pointer-write bypass. This version fixes both.
 
-Design stance: CONSERVATIVE. When in doubt, ALLOW. Only a *clear* cross-athlete
-mismatch (or athlete-data access with no active athlete) blocks. Any parse error
-or unexpected failure -> exit 0 (fail open). A crashing hook must never break the
-user's session, and an over-eager block is worse than a missed edge case here
-because the SessionStart banner + explicit-arg discipline are the primary guard.
+What blocks (when an active athlete is set and the op targets a DIFFERENT, known
+athlete):
+  Bash:
+    - a redirect (> / >>) into  ~/.runforlife/athletes/<other>/...
+    - a mutating coreutil (rm, mv, cp, tee, truncate, dd, ln, ...) targeting that dir
+    - a sqlite3 write (INSERT/UPDATE/DELETE/DROP/ALTER) against that dir
+    - a data CLI invoked with --user <other> / --user=<other>
+  Edit / Write / NotebookEdit / MultiEdit:
+    - file_path under ~/.runforlife/athletes/<other>/...   (the original write vector)
+
+What is allowed: read-only cross-athlete access (SELECT/cat/read), bare mentions,
+the /switch pointer write (~/.runforlife/active_athlete — not under athletes/),
+and anything touching only the active athlete.
+
+Roster is discovered from disk (∪ config.USERS ∪ a literal fallback) so a newly
+added athlete is guarded too, not silently unprotected.
+
+Fail-open is deliberate: an unexpected hook crash returns exit 0 rather than
+bricking the user's session. The structured checks below are the protection; a
+belt-and-suspenders SessionStart banner and explicit-arg discipline back them up.
 """
 
 import json
@@ -34,42 +44,54 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _SRC_DIR = _REPO_ROOT / "src"
 
-# Known athlete names. Kept as a small literal set: the guard must work even if
-# the runforlife package fails to import, and these two names are the entire
-# multi-athlete universe for this single-machine deployment.
-_KNOWN_ATHLETES = ("tezuesh", "kakul")
+# Literal fallback roster — the guard must work even if the package can't import.
+_FALLBACK_ATHLETES = ("tezuesh", "kakul")
 
-# Signals that a command "clearly touches athlete data" even without naming an
-# athlete — used only when NO active athlete is set.
-_DATA_CLI_MODULES = (
-    "runforlife.rag.readiness",
-    "runforlife.rag.banister",
-    "runforlife.sync.nightly",
+# Mutating shell commands that, when targeting another athlete's dir, are writes.
+_MUTATING_CMDS = (
+    "rm", "rmdir", "mv", "cp", "tee", "truncate", "dd", "ln",
+    "install", "shred", "rsync", "chmod", "chown",
 )
+# SQL keywords that mean a write. Word-boundary matched so "created_at" (a column)
+# and the replace() function don't trip a read; the common write verbs suffice.
+_SQL_WRITE_KEYWORDS = ("insert", "update", "delete", "drop", "alter")
+
+# Tools that write files (vs read-only Read). file_path under another athlete's
+# dir is the exact 2026-06 write vector and was previously unguarded.
+_FILE_TOOLS = ("Edit", "Write", "NotebookEdit", "MultiEdit")
 
 
 def _ensure_src_on_path() -> None:
-    """Make the runforlife package importable from the repo's src/ dir."""
     src = str(_SRC_DIR)
     if src not in sys.path:
         sys.path.insert(0, src)
 
 
-def _read_active_athlete() -> str | None:
-    """Return the active athlete name, or None if unset/empty/missing.
+def _known_athletes() -> tuple[str, ...]:
+    """Roster = config.USERS ∪ on-disk athlete dirs ∪ literal fallback."""
+    names: set[str] = set(_FALLBACK_ATHLETES)
+    try:
+        _ensure_src_on_path()
+        from runforlife.config import USERS
+        names.update(USERS)
+    except Exception:  # noqa: BLE001 - package may not import; fallback stands
+        pass
+    try:
+        athletes_dir = Path.home() / ".runforlife" / "athletes"
+        if athletes_dir.is_dir():
+            names.update(p.name for p in athletes_dir.iterdir() if p.is_dir())
+    except Exception:  # noqa: BLE001
+        pass
+    return tuple(sorted(names))
 
-    Tries the canonical paths helper first; falls back to a direct read of
-    ~/.runforlife/active_athlete if the package can't be imported, so the guard
-    keeps working even when the env is broken.
-    """
+
+def _read_active_athlete() -> str | None:
     try:
         _ensure_src_on_path()
         from runforlife.storage.paths import active_athlete_file
-
         path = active_athlete_file()
     except Exception:  # noqa: BLE001 - fall back to a hard-coded path
         path = Path.home() / ".runforlife" / "active_athlete"
-
     try:
         if not path.exists():
             return None
@@ -79,132 +101,103 @@ def _read_active_athlete() -> str | None:
         return None
 
 
-def _referenced_athletes(command: str) -> set[str]:
-    """Return the set of KNOWN athlete names clearly referenced by the command.
+def _cli_user_targets(command: str, known: tuple[str, ...]) -> set[str]:
+    """Athletes named via `--user <name>` / `--user=<name>` — a CLI data op.
 
-    A name counts as referenced when it appears as:
-      - a whole-word token (so "kakul" matches but "kakulish" / "akakul" do not),
-        which covers `--user kakul`, `--user=kakul`, bare mentions, etc.; OR
-      - a path segment under .runforlife/athletes/<name>/...
-
-    Matching is case-insensitive and word-boundary aware to avoid false hits on
-    substrings of unrelated words.
+    A CLI told to operate on another athlete is a cross-athlete operation
+    regardless of whether that particular subcommand reads or writes; treated
+    conservatively as blocking, because read-only comparison goes through direct
+    SELECTs (allowed below), not through --user.
     """
-    if not command:
-        return set()
-
-    referenced: set[str] = set()
-    lowered = command.lower()
-
-    for name in _KNOWN_ATHLETES:
-        # Whole-word match: boundaries are anything that is not a word char.
-        # This catches `--user kakul`, `--user=kakul`, `'kakul'`, `/kakul/`, etc.
-        if re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", lowered):
-            referenced.add(name)
-
-    return referenced
-
-
-_POINTER_RE = re.compile(r"\.runforlife[/\\]active_athlete\b", re.IGNORECASE)
-
-
-def _writes_active_pointer(command: str) -> bool:
-    """True if the command references the active_athlete pointer file.
-
-    The /switch command writes the incoming athlete's name into this pointer.
-    That write necessarily *names* the new athlete, which otherwise looks like a
-    cross-athlete reference and gets blocked — a chicken-and-egg: the guard reads
-    the OLD active athlete, so you could never switch. Referencing the pointer
-    file is the structural signal that this is a switch, not a reach into another
-    athlete's data directory.
-    """
-    return bool(command and _POINTER_RE.search(command))
-
-
-def _referenced_athletes_via_path(command: str) -> set[str]:
-    """Names referenced specifically as an ``athletes/<name>`` path segment.
-
-    This is the dangerous kind of cross-athlete reference — actually reaching
-    into another athlete's data directory — as distinct from a bare name token
-    (which a legitimate pointer write contains by necessity).
-    """
-    if not command:
-        return set()
-    lowered = command.lower()
     found: set[str] = set()
-    for name in _KNOWN_ATHLETES:
-        if re.search(rf"athletes[/\\]{re.escape(name)}(?![\w])", lowered):
+    lowered = command.lower()
+    for name in known:
+        if re.search(rf"--user(?:\s+|=)['\"]?{re.escape(name.lower())}(?![\w])", lowered):
             found.add(name)
     return found
 
 
-def _touches_athlete_data(command: str) -> bool:
-    """Heuristic: does this command clearly access athlete data at all?
+def _path_write_targets(command: str, known: tuple[str, ...]) -> set[str]:
+    """Athletes whose athletes/<name>/ dir the command WRITES to.
 
-    Used only when no active athlete is set, to decide whether to nudge the user
-    to /switch. Kept narrow on purpose — broad matching here would block benign
-    commands when no athlete is loaded.
+    Read-only access (sqlite SELECT, cat, a python read) is intentionally NOT a
+    write and is allowed — that's what enables /compare and inspection. Only a
+    redirect into the dir, a mutating coreutil targeting it, or a sqlite write
+    against it counts.
     """
-    if not command:
-        return False
     lowered = command.lower()
+    has_sqlite = "sqlite3" in lowered
+    has_sql_write = has_sqlite and bool(
+        re.search(rf"\b(?:{'|'.join(_SQL_WRITE_KEYWORDS)})\b", lowered)
+    )
+    cmds = "|".join(_MUTATING_CMDS)
+    found: set[str] = set()
+    for name in known:
+        nm = re.escape(name.lower())
+        if not re.search(rf"athletes[/\\]{nm}(?![\w])", lowered):
+            continue
+        if re.search(rf">>?\s*\S*athletes[/\\]{nm}", lowered):
+            found.add(name)
+        elif re.search(rf"\b(?:{cmds})\b[^|&;\n]*athletes[/\\]{nm}", lowered):
+            found.add(name)
+        elif has_sql_write:
+            found.add(name)
+    return found
 
-    if ".runforlife" in lowered:
-        return True
-    if "athletes/" in lowered or "athletes\\" in lowered:
-        return True
-    for module in _DATA_CLI_MODULES:
-        if module in lowered and "--user" in lowered:
-            return True
-    return False
 
-
-def _evaluate(command: str, active: str | None) -> tuple[bool, str]:
-    """Decide whether to block. Returns (should_block, reason).
-
-    reason is only meaningful when should_block is True.
-    """
-    referenced = _referenced_athletes(command)
+def _evaluate_bash(command: str, active: str | None, known: tuple[str, ...]) -> tuple[bool, str]:
+    cli = _cli_user_targets(command, known)
+    writes = _path_write_targets(command, known)
 
     if active:
-        # Block only on a genuine cross-athlete mismatch: the command names a
-        # known athlete that is NOT the active one. Referencing the active
-        # athlete (or no athlete) is fine.
-        others = sorted(name for name in referenced if name != active)
-        if others:
-            # Exception: the /switch pointer-write names the incoming athlete by
-            # necessity. Allow it as long as it does not ALSO reach into that
-            # athlete's data directory (athletes/<name>/...). Without this, the
-            # guard blocks /switch's own write and the active athlete can never
-            # change.
-            if _writes_active_pointer(command):
-                path_others = sorted(
-                    name for name in _referenced_athletes_via_path(command)
-                    if name != active
-                )
-                if not path_others:
-                    return False, ""
-            other = others[0]
+        offenders = sorted((cli | writes) - {active})
+        if offenders:
+            other = offenders[0]
+            how = "writes to" if other in writes else "runs a data CLI (--user) for"
             reason = (
-                f"[RunForLife] Blocked: command targets '{other}' but the active "
-                f"athlete is '{active}'. This guard prevents mixing "
-                f"{other}'s and {active}'s data.\n"
-                f"Run /switch {other} first if you really mean to act on {other}."
+                f"[RunForLife] Blocked: command {how} '{other}' but the active "
+                f"athlete is '{active}'. This guard prevents a cross-athlete WRITE "
+                f"corrupting {other}'s data.\n"
+                f"Reads are fine; run /switch {other} first to act on {other}."
             )
             return True, reason
         return False, ""
 
-    # No active athlete set. Block only if the command clearly touches athlete
-    # data (named athlete, .runforlife path, or a data CLI with --user).
-    if referenced or _touches_athlete_data(command):
+    # No active athlete: cross-athlete READS are harmless; only block WRITES.
+    offenders = sorted(cli | writes)
+    if offenders:
         reason = (
-            "[RunForLife] Blocked: no active athlete is set, but this command "
-            "touches athlete data. Run /switch <tezuesh|kakul> to load an "
-            "athlete before running data, readiness, banister, or sync commands."
+            "[RunForLife] Blocked: no active athlete is set and this command would "
+            "WRITE athlete data. Run /switch <athlete> first."
         )
         return True, reason
-
     return False, ""
+
+
+_ATHLETE_PATH_RE = re.compile(r"\.runforlife/athletes/([^/\\]+)[/\\]", re.IGNORECASE)
+
+
+def _evaluate_file_tool(file_path: str | None, active: str | None,
+                        known: tuple[str, ...]) -> tuple[bool, str]:
+    """Block an Edit/Write whose target is under another athlete's data dir."""
+    if not file_path:
+        return False, ""
+    norm = str(file_path).replace("\\", "/")
+    m = _ATHLETE_PATH_RE.search(norm)
+    if not m:
+        return False, ""
+    target = m.group(1).lower()
+    known_lower = {k.lower() for k in known}
+    if target not in known_lower:
+        return False, ""
+    if not active or target == active.lower():
+        return False, ""
+    reason = (
+        f"[RunForLife] Blocked: this edit/write targets '{target}'s data file but "
+        f"the active athlete is '{active}'. Cross-athlete file writes are the exact "
+        f"path that caused prior data loss.\nRun /switch {target} first."
+    )
+    return True, reason
 
 
 def main() -> int:
@@ -217,18 +210,25 @@ def main() -> int:
         if not isinstance(event, dict):
             return 0
 
-        if event.get("tool_name") != "Bash":
-            return 0
-
+        tool_name = event.get("tool_name")
         tool_input = event.get("tool_input")
         if not isinstance(tool_input, dict):
             return 0
-        command = tool_input.get("command")
-        if not isinstance(command, str) or not command.strip():
-            return 0
 
         active = _read_active_athlete()
-        should_block, reason = _evaluate(command, active)
+        known = _known_athletes()
+
+        if tool_name == "Bash":
+            command = tool_input.get("command")
+            if not isinstance(command, str) or not command.strip():
+                return 0
+            should_block, reason = _evaluate_bash(command, active, known)
+        elif tool_name in _FILE_TOOLS:
+            file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
+            should_block, reason = _evaluate_file_tool(file_path, active, known)
+        else:
+            return 0
+
         if should_block:
             print(reason, file=sys.stderr)
             return 2
