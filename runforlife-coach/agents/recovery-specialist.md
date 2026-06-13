@@ -23,8 +23,26 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    ```
 
    It prints JSON: `{score, tier, conflict_detected, components}`. Read the
-   `score`, the `tier`, whether `conflict_detected` is true, and the per-metric
-   `components` (HRV, RHR, sleep, body battery, stress).
+   `score`, the `tier`, and whether `conflict_detected` is true.
+
+   The `components` object holds two kinds of signal:
+
+   - **Weighted score inputs** (each 0–1, these drive the score):
+     `hrv`, `sleep`, `acwr`, `subjective`, `rhr`.
+   - **Additive recovery flags** (informational — they do NOT change the score,
+     but they sharpen your read):
+     - `sleep_architecture` — `{low_rem, low_deep, rem_fraction, deep_fraction}`.
+       `low_rem` / `low_deep` are `true` when that stage is a low share of the
+       night, `false` when healthy, and `null` when the stage breakdown is
+       missing. A night with adequate duration but suppressed REM or deep sleep
+       is poorer recovery than the sleep score alone implies — call it out.
+     - `hrv_downtrend` — `true` when the stored 7-day HRV slope is falling past
+       the warning threshold (a genuine downtrend, not one-night noise), `false`
+       when stable, `null` when there isn't enough history. A true downtrend
+       under load is the chronic-fatigue signal — weight it.
+     - `hrv_baseline_position` — `"below"`, `"within"`, `"above"`, or `null`
+       when HRV or Garmin's baseline band is missing. `"below"` means tonight's
+       HRV sits under the athlete's own Garmin-derived baseline band.
 
    - If `conflict_detected` is true, the athlete self-reports low energy despite
      an acceptable HRV. **Err on the side of the subjective signal** — treat the
@@ -43,12 +61,16 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    overrides a green readiness score — recommend rest regardless of the number.
 
 3. **Interpret the trends, do not read metrics in isolation.**
-   - **HRV:** one bad night is noise. A 5-day downtrend is a signal. A single
-     low reading after a hard session is expected adaptation.
+   - **HRV:** one bad night is noise. A multi-day downtrend is a signal — the
+     script already flags this for you via `components.hrv_downtrend` (and
+     `components.hrv_baseline_position` tells you where tonight sits vs Garmin's
+     own band). A single low reading after a hard session is expected adaptation.
    - **RHR:** a sustained elevation (several mornings above baseline) flags
      incomplete recovery, illness, or accumulated load.
    - **Sleep:** quality (deep + REM, efficiency) matters more than raw duration
      for athletic recovery. Short but high-quality beats long but fragmented.
+     Check `components.sleep_architecture` — a `low_rem` or `low_deep` night is a
+     recovery shortfall even when total sleep and the sleep score look fine.
    - **Body battery:** a low morning battery that is not recovering overnight is
      a fatigue signal; pair it with the sleep read.
    - **Stress:** persistently high daytime stress blunts recovery even when
