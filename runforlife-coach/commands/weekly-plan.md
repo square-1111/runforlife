@@ -70,11 +70,85 @@ Read these for `<athlete>` so the plan is anchored, not generic:
   - Travel days → schedule easy/rest or treadmill-friendly sessions, not key workouts.
   - **Injury / niggle → demote intensity and volume on affected days; when in doubt,
     rest. Safety wins over progression.**
+  - **Active interval-block template → the scheduled plan to build against.** Among
+    the non-expired `items[].content`, find the interval-block template (free text,
+    e.g. `"INTERVAL BLOCK ... Weekly template: Mon rest+mobility | Tue QUALITY | Wed
+    leg day+easy shuffle | Thu push/pull+easy+strides | Fri brick | Sat rest/easy |
+    Sun long run easy. Quality alternates short(400-800m)/long(1.2-2km). 4-wk split:
+    W1 6x400@17.5 ... Long run W1-4: 14/16/17/13km. Easy 11.2-11.6km/h."`). Extract
+    from it: the **day-by-day weekly structure**, **which week of the 4-week split**
+    the athlete is in and its **reps/paces**, and the **long-run progression**. This
+    is the DEFAULT shape the 7-day plan must follow (§5) — not a generic 80/20 week.
+    Only honor non-expired items; if no such template is on file, fall back to the
+    generic 80/20 week.
+
+- **Completed sessions this week** (metrics.db — coach reads, never writes): read what
+  the athlete has ALREADY done in the current calendar week (Mon → today) so the plan
+  covers only the REMAINING days and never double-books a session already run:
+
+  ```bash
+  cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "
+  import sqlite3, datetime, os
+  a='<athlete>'
+  db=os.path.expanduser(f'~/.runforlife/athletes/{a}/metrics.db')
+  today=datetime.date.today(); monday=today-datetime.timedelta(days=today.weekday())
+  con=sqlite3.connect(db)
+  for r in con.execute('SELECT date, ran_today, run_distance_km, run_avg_pace_sec_per_km, run_avg_hr, run_avg_cadence, run_efficiency_factor FROM daily_metrics WHERE user_id=? AND date>=? AND date<=? ORDER BY date', (a, monday.isoformat(), today.isoformat())):
+      print(r)
+  "
+  ```
+
+  From these rows, note **which days this week already have a run**, and whether this
+  week's **quality session** and **long run** are already done (a long run reads as a
+  clearly larger `run_distance_km`; a quality session as a faster
+  `run_avg_pace_sec_per_km`). You are only reading which sessions exist — do NOT do
+  arithmetic yourself; the training-specialist still owns all volume/ACWR math. Feed
+  this into §5 so the generated plan fills only the REMAINING days.
 
 If `profile.json` is missing, the athlete is not initialized — say so and suggest
 running the init/migration scripts; do not fabricate goals.
 
 ## 4. Delegate to the specialists (cross-domain fan-out)
+
+### Auto-sync freshness check (run BEFORE the fan-out)
+
+The plan must be built on **fresh volume/ACWR**, so bring the DB current first. Find the
+latest ingested date:
+
+```bash
+cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "
+import sqlite3, os
+a='<athlete>'
+db=os.path.expanduser(f'~/.runforlife/athletes/{a}/metrics.db')
+row=sqlite3.connect(db).execute('SELECT max(date) FROM daily_metrics WHERE user_id=?', (a,)).fetchone()
+print(row[0] if row and row[0] else 'NONE')
+"
+```
+
+Let `latest` be that value and `yesterday` = today − 1 day. Then:
+
+- **If `latest` is `NONE`** (empty DB): run `uv run python -m runforlife.sync.nightly
+  --user <athlete>` to pull at least yesterday; if the DB is still empty afterward, go
+  straight to the §6 empty-DB guardrail.
+- **If `latest` is older than `yesterday`:** sync the gap automatically — from the day
+  AFTER `latest` through today:
+
+  ```bash
+  cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly --user <athlete> --start <day-after-latest> --end <today>
+  ```
+
+  Compute `<day-after-latest>` deterministically, e.g. `python3 -c "import datetime;
+  print((datetime.date.fromisoformat('<latest>')+datetime.timedelta(days=1)).isoformat())"`.
+  Garmin is rate-limited, so a multi-day range can take a few minutes — let it finish.
+  Re-running is safe (already-ingested days are skipped).
+- **If `latest` is already yesterday or today:** the DB is fresh — skip the sync.
+
+**On sync failure** (the command errors, or the DB is still stale afterward), do NOT
+block the plan. Fall back to the §6 empty-DB guardrail and build the week off the data
+you have, adding an explicit **"as of `<latest date>`"** caveat so the athlete knows the
+plan is anchored to the last synced day, not today.
+
+### Fan-out
 
 Invoke the specialist subagents via the **Task tool**, passing `<athlete>` and the
 `--start` date **explicitly** in each prompt (they run in isolated context and never
@@ -121,6 +195,17 @@ Combine the specialists' numbers into one concrete week. Honor these rules:
 - **One long run**, placed on the athlete's preferred long-run day if known.
 - **Align to the goal phase** from the race-specialist (race-specific paces only in
   build/peak; easy aerobic + consistency in base; reduced volume in taper).
+- **Match the athlete's scheduled interval-block template (§3) by default.** The
+  day-by-day shape, the current week's reps/paces, and the long-run progression come
+  from THEIR template — not a generic 80/20 week. Where the template and the safety
+  rails (ACWR 0.8–1.3, ≥1 rest day, ~10% ceiling) conflict, **safety still wins** —
+  demote, shorten, or move the session — but the default weekly shape follows the
+  scheduled block. If no template is on file, build the generic 80/20 week above.
+- **Cover only the REMAINING days; never double-book what's already banked (§3).** For
+  plan days that fall in the current calendar week, skip days that already have a run,
+  and if this week's quality session or long run is already done, do NOT prescribe
+  another one — fill the rest of the week around what the athlete has already
+  completed.
 - **Slot the strength/Hyrox work** from the strength-specialist (when it ran) onto
   the right days — keep heavy lower-body/station work off hard-run days, and label
   it in the plan (the "Run type" column may read `strength` or `Hyrox stations`).

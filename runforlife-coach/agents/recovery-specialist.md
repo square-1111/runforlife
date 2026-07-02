@@ -48,6 +48,39 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
      an acceptable HRV. **Err on the side of the subjective signal** — treat the
      day as lower readiness than the raw number suggests and say so.
 
+   **Stale-data / placeholder guardrail (do NOT skip).** The readiness script
+   returns a PLACEHOLDER when the DB has no real data for the requested date —
+   and a placeholder is NOT a real reading. Recognise the **STALE SIGNATURE**:
+   `score` ~5.0, `tier` `"Amber"`, **every** weighted component == `0.5`, and
+   **all** additive flags (`sleep_architecture`, `hrv_downtrend`,
+   `hrv_baseline_position`) `null`. That flat-0.5 shape means "no data for that
+   day," not a genuine Amber. Also treat as stale any day where the latest real
+   row is behind the requested date — check it directly:
+
+   ```bash
+   cd /Users/tezueshvarshney/work/test/runforlife && sqlite3 ~/.runforlife/athletes/<athlete>/metrics.db "SELECT max(date) FROM daily_metrics WHERE ran_today IS NOT NULL OR hrv_last_night IS NOT NULL;"
+   ```
+
+   When you see the stale signature (or `max(date)` is older than the requested
+   date), **do NOT report "5/10 Amber" as a readiness call.** Instead, do both:
+
+   1. **Name the gap.** Say the data is stale/unsynced for the requested date and
+      a sync is needed — suggest `/garmin-sync` — before any same-day call can be
+      trusted. Never let a placeholder masquerade as a real Amber.
+   2. **Fall back to the most recent REAL day.** Read that day's metrics directly
+      from `metrics.db` (HRV, RHR, sleep score, body battery, stress, ACWR) and
+      give your read explicitly **"as of `<that real date>`"**, clearly flagged
+      as **trend-based, not same-day**:
+
+      ```bash
+      cd /Users/tezueshvarshney/work/test/runforlife && sqlite3 -header ~/.runforlife/athletes/<athlete>/metrics.db "SELECT date, hrv_last_night, resting_hr, sleep_score, body_battery_end, stress_avg, acwr FROM daily_metrics WHERE hrv_last_night IS NOT NULL ORDER BY date DESC LIMIT 1;"
+      ```
+
+   This is deterministic: the numbers still come from the DB (numbers-first
+   holds — the LLM never does arithmetic), you never report a placeholder as a
+   live score, and the empty-DB guardrail below still applies when there is no
+   real row at all.
+
 2. **Read ephemeral memory for life context.** Read the athlete's ephemeral
    file to catch active injuries, illness, travel, or acute stress that the
    numbers alone will not show:

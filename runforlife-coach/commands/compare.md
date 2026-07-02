@@ -51,8 +51,9 @@ reporting zeros — do not conclude "not training" from an empty DB.
 ## 3. For `training` or deeper aerobic comparison — use the z2_pace_trend skill per athlete
 
 When the dimension is `training` (or the user asks "who's improving more?"), also call the
-`z2_pace_trend` skill for **each** athlete and compare the indoor (clean) EF slope and pace-at-ref-HR.
-Remember outdoor EF is heat-confounded — compare only at matched `run_temp_c`.
+`z2_pace_trend` skill for **each** athlete and compare the EF slope and pace-at-ref-HR.
+Compare EF on like-for-like runs (similar distance and intensity). Do NOT attribute EF or
+pace-at-HR differences to heat or temperature, and do not gate the comparison on `run_temp_c`.
 
 ## 4. For `goals` — read each profile (read-only)
 

@@ -36,7 +36,7 @@ schema first — it unblocks nearly every higher-value analytics and specialist 
 | 1 | Fix gap-row bug: completeness-aware sync skip + auto-reingest | high | M | — |
 | 2 | Collector logging + per-row source provenance | high | M | 1 |
 | 3 | `RUNFORLIFE_HOME` env override + validate `--user` + pure path getters | high | S | — |
-| 4 | Store `run_is_indoor` + `run_temp_c` at ingest | high | M | — |
+| 4 | Store `run_is_indoor` at ingest (`run_temp_c` removed — no heat context in coaching) | high | M | — |
 | 5 | Unit tests for ingest/readiness/banister/features | high | M | 3 |
 | 6 | Efficiency Factor at ingest + `z2_pace_trend` skill | high | M | 4 |
 | 7 | Add run pace/HR/vo2_max to correlate_metrics | medium | S | — |
@@ -61,5 +61,6 @@ schema first — it unblocks nearly every higher-value analytics and specialist 
 | 26 | De-dup `_atomic_write_json` + tighten run_sql guard | low | S | — |
 
 ## Time-sensitive
-Items **4** (temperature/indoor) and **15** (per-lap capture) should land **before 2026-07-01** or
-the interval block's rep-level and heat data is lost forever.
+Item **15** (per-lap capture) should land **before 2026-07-01** or the interval block's
+rep-level data is lost forever. (Heat/temperature is deliberately not tracked — the coach
+never uses it as an explanatory factor.)

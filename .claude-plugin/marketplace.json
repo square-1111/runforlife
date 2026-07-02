@@ -1,0 +1,16 @@
+{
+  "name": "runforlife-local",
+  "owner": {
+    "name": "Tezuesh"
+  },
+  "metadata": {
+    "description": "Local marketplace for the runforlife-coach plugin (multi-athlete AI running coach)."
+  },
+  "plugins": [
+    {
+      "name": "runforlife-coach",
+      "source": "./runforlife-coach",
+      "description": "Multi-athlete AI running coach with recovery, training, race, strength/Hyrox, and analytics specialist subagents. Provides /panel, /daily-plan, /weekly-plan, /compare, /chart, /goal-status, /reflect, /note, /switch, /personality."
+    }
+  ]
+}
