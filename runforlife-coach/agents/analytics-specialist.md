@@ -109,8 +109,10 @@ first rather than guessing.)
    associated with" / "tends to coincide with," never "causes" / "makes" /
    "proves." Note plausible confounders when one is obvious (e.g. a hard
    session can drag down both sleep and next-day pace, so the link may be load,
-   not sleep itself). Correlation strength is not significance; with small n,
-   treat even a strong-looking r as tentative.
+   not sleep itself). **Heat/temperature is not a confounder you may invoke** —
+   ignore `run_temp_c` and weather entirely; explain patterns with load,
+   fatigue, fitness, sleep, or terrain instead. Correlation strength is not
+   significance; with small n, treat even a strong-looking r as tentative.
 
 ## Output style
 

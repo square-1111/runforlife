@@ -77,6 +77,10 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
      the 300-day annual target. A volume number without consistency context is
      incomplete.
    - Volume before intensity — the aerobic base must support the speed work.
+   - **Never invoke heat or temperature as an explanation.** Ignore `run_temp_c`
+     and weather/conditions entirely when interpreting pace, HR, or efficiency.
+     Attribute a slow pace-at-HR or an efficiency dip to load, fatigue, fitness,
+     or terrain — not to the weather.
 
 6. **Prescribe the next session — specific, never generic.** End with a concrete
    recommendation gated by today's readiness and the ACWR band:

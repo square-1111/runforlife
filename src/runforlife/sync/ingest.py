@@ -10,6 +10,8 @@ Flow per date:
   4. metrics_store.upsert_day() → stored
 """
 
+import logging
+
 from runforlife.rag.daily_document import DailyDocument
 from runforlife.rag.features import (
     compute_sleep_efficiency_delta,
@@ -18,11 +20,14 @@ from runforlife.rag.features import (
 )
 from runforlife.storage.metrics_store import (
     get_window,
+    set_computed_readiness,
     upsert_activity_session,
     upsert_day,
     upsert_run_lap,
 )
 from runforlife.sync.collector import SOURCE_KEYS, collect_day
+
+logger = logging.getLogger(__name__)
 
 
 def _pace_to_seconds(pace_str: str | None) -> float | None:
@@ -55,21 +60,6 @@ def _time_from_local_ts(ts) -> str | None:
         return str(ts)[11:16]
     except Exception:
         return None
-
-
-def _run_temp_c(activity: dict) -> float | None:
-    """Ambient temperature (°C) for a run, averaged from Garmin min/max if present.
-
-    Garmin reports minTemperature/maxTemperature on outdoor activities (and the
-    indoor room temp on treadmill runs). Returns the midpoint, or whichever bound
-    is available, or None when the device logged no temperature.
-    """
-    lo = activity.get("minTemperature")
-    hi = activity.get("maxTemperature")
-    vals = [v for v in (lo, hi) if isinstance(v, (int, float))]
-    if not vals:
-        return None
-    return round(sum(vals) / len(vals), 1)
 
 
 def _is_running(activity: dict) -> bool:
@@ -256,11 +246,15 @@ def _build_document(user: str, date: str, raw: dict) -> DailyDocument:
             doc.run_avg_hr = round(avg_hr) if avg_hr else None
             doc.training_effect_aerobic = main_run.get("aerobicTrainingEffect")
 
-            # Environment: treadmill/indoor vs outdoor, and ambient temperature.
-            # Both unconfound pace/EF trends (treadmill pace ≠ outdoor; heat tax).
+            # Cadence (steps/min) — run-economy signal. Watched on bricks because
+            # turnover sags when legs are pre-fatigued off the bike.
+            cadence = main_run.get("averageRunningCadenceInStepsPerMinute")
+            doc.run_avg_cadence = round(cadence) if cadence else None
+
+            # Environment: treadmill/indoor vs outdoor (treadmill pace is set, not
+            # GPS-measured, so it trends differently from outdoor pace/EF).
             type_key = (main_run.get("activityType", {}) or {}).get("typeKey", "").lower()
             doc.run_is_indoor = ("treadmill" in type_key) or ("indoor" in type_key)
-            doc.run_temp_c = _run_temp_c(main_run)
 
             # Efficiency Factor (speed/HR) — aerobic-progress signal that raw pace hides.
             doc.run_efficiency_factor = efficiency_factor(
@@ -335,6 +329,17 @@ def ingest_day(user: str, date: str, delay_seconds: float = 0.3) -> DailyDocumen
     doc = _build_document(user, date, raw)
     _enrich_features(doc)
     upsert_day(user, doc)
+
+    # Composite readiness — computed AFTER persist because it reads the 21-day
+    # window including today's just-stored row. Replaces Garmin's readiness_score,
+    # which the FR165 never provides. Soft-fail: a readiness error must not sink
+    # an otherwise-good day's ingest.
+    try:
+        from runforlife.rag.readiness import compute_readiness
+        r = compute_readiness(user, date)
+        set_computed_readiness(user, date, r.score, r.tier)
+    except Exception as e:  # noqa: BLE001 — readiness is additive, never fatal
+        logger.warning("readiness compute soft-fail user=%s date=%s error=%s", user, date, e)
 
     # Additive: capture the main run's per-lap detail (fetched by collect_day).
     # Independent of the daily aggregate above — a missing/failed splits fetch

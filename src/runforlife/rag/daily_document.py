@@ -55,9 +55,9 @@ class DailyDocument:
     run_avg_pace_sec_per_km: float | None = None
     run_avg_hr: int | None = None
     training_effect_aerobic: float | None = None
-    run_is_indoor: bool | None = None       # True = treadmill/indoor (pace not heat-confounded)
-    run_temp_c: float | None = None          # avg ambient temp °C during the run (heat normalization)
+    run_is_indoor: bool | None = None       # True = treadmill/indoor (set pace, not GPS-measured)
     run_efficiency_factor: float | None = None  # speed(m/min)/HR — aerobic efficiency (higher = fitter)
+    run_avg_cadence: int | None = None       # steps/min — run economy signal (drifts low off the bike)
 
     # --- Fitness ---
     vo2_max: float | None = None            # ml/kg/min — Garmin estimate
@@ -104,8 +104,8 @@ class DailyDocument:
             "run_avg_hr":               self.run_avg_hr,
             "training_effect_aerobic":  self.training_effect_aerobic,
             "run_is_indoor":            None if self.run_is_indoor is None else int(self.run_is_indoor),
-            "run_temp_c":               self.run_temp_c,
             "run_efficiency_factor":    self.run_efficiency_factor,
+            "run_avg_cadence":          self.run_avg_cadence,
             "vo2_max":                  self.vo2_max,
             "acwr":                     self.acwr,
             "hrv_7d_slope":             self.hrv_7d_slope,

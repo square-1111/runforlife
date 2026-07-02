@@ -130,11 +130,17 @@ _MIGRATION_COLUMNS = [
     ("active_calories",       "INTEGER"),
     # Fitness
     ("vo2_max",               "REAL"),
-    # Run environment (heat / treadmill confounders for pace & EF analytics)
+    # Run environment (treadmill vs outdoor — set pace differs from GPS pace)
     ("run_is_indoor",         "INTEGER"),
-    ("run_temp_c",            "REAL"),
     # Aerobic efficiency (speed/HR) — the base-builder's progress signal
     ("run_efficiency_factor", "REAL"),
+    # Run cadence (steps/min) — economy signal; sags off the bike on bricks
+    ("run_avg_cadence",       "INTEGER"),
+    # Composite readiness (0–10) + tier — computed by rag.readiness, NOT Garmin.
+    # The FR165 never sends Garmin Training Readiness, so readiness_score stays
+    # NULL; this owned score replaces it. Written post-persist (needs today's row).
+    ("computed_readiness",    "REAL"),
+    ("readiness_tier",        "TEXT"),
 ]
 
 
@@ -184,6 +190,24 @@ def upsert_day(user: str, doc: "DailyDocument") -> None:
             f"INSERT INTO daily_metrics ({col_names}) VALUES ({placeholders}) "
             f"ON CONFLICT(user_id, date) DO UPDATE SET {update_clause}",
             [row[c] for c in cols],
+        )
+        conn.commit()
+
+
+def set_computed_readiness(
+    user: str, date: str, score: float | None, tier: str | None
+) -> None:
+    """Write the computed readiness score + tier onto an existing day's row.
+
+    Separate from upsert_day because readiness is computed AFTER the row is
+    persisted (compute_readiness reads the 21-day window including today). A
+    no-op if the row doesn't exist yet — readiness without a day is meaningless.
+    """
+    with _conn(user) as conn:
+        conn.execute(
+            "UPDATE daily_metrics SET computed_readiness = ?, readiness_tier = ? "
+            "WHERE user_id = ? AND date = ?",
+            (score, tier, user, date),
         )
         conn.commit()
 

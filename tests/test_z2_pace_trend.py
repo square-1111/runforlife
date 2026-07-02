@@ -15,14 +15,14 @@ def sandbox(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _add_run(date, pace, hr, indoor, temp=None, ef=None):
+def _add_run(date, pace, hr, indoor, ef=None):
     from runforlife.storage import metrics_store
     from runforlife.rag.daily_document import DailyDocument
 
     metrics_store.upsert_day("tezuesh", DailyDocument(
         user="tezuesh", date=date, ran_today=True, run_distance_km=5.0,
         run_avg_pace_sec_per_km=pace, run_avg_hr=hr,
-        run_is_indoor=indoor, run_temp_c=temp, run_efficiency_factor=ef,
+        run_is_indoor=indoor, run_efficiency_factor=ef,
     ))
 
 
@@ -30,7 +30,7 @@ def test_splits_indoor_and_outdoor_and_filters_band(sandbox):
     from runforlife.skills.analysis.z2_pace_trend import Z2PaceTrend
 
     _add_run("2026-06-01", 350, 130, indoor=True)     # Z2 indoor
-    _add_run("2026-06-02", 420, 135, indoor=False, temp=30)  # Z2 outdoor
+    _add_run("2026-06-02", 420, 135, indoor=False)    # Z2 outdoor
     _add_run("2026-06-03", 300, 165, indoor=True)     # HR above band → excluded
 
     res = Z2PaceTrend().execute(user="tezuesh", weeks=8, hr_low=125, hr_high=145)

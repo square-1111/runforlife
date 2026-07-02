@@ -35,6 +35,10 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    metrics"`, you do not yet have enough synced history for a Banister read —
    treat this as the empty-DB case below, not as "no fitness."
 
+   **Never invoke heat or temperature as an explanation.** Ignore `run_temp_c`
+   and weather/conditions entirely when reading fitness trajectory, pace-at-HR,
+   or efficiency. Read the trend off load and Banister state, never the weather.
+
 2. **Read the goal from the profile (the coach never invents it).** Read the
    athlete's profile and pull the goals verbatim:
 

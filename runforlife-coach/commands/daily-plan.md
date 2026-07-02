@@ -45,7 +45,40 @@ Parse a `--date YYYY-MM-DD` flag from `$ARGUMENTS`.
 
 ## 3. Gather the deterministic inputs (run these exactly)
 
-Run all three from the repo root. These print JSON / rows — never compute scores yourself.
+Run these from the repo root. They print JSON / rows — never compute scores yourself.
+
+### 3.0 Auto-sync freshness check (run FIRST, before readiness/banister)
+
+Today's call must use today's data. Before reading readiness/banister, check how fresh the local DB
+is and top it up automatically if it is stale.
+
+1. Read the latest ingested day for the user:
+
+   ```bash
+   sqlite3 ~/.runforlife/athletes/<athlete>/metrics.db \
+     "SELECT max(date) FROM daily_metrics WHERE user_id = '<athlete>';"
+   ```
+
+2. If that latest date is **older than yesterday** (i.e. there is a gap between the day after it and
+   `<date>`/today), AUTOMATICALLY pull the missing range before doing anything else:
+
+   ```bash
+   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly \
+     --user <athlete> --start <day-after-latest> --end <today>
+   ```
+
+   Already-ingested days are skipped, so this is safe to run. A wide range can take minutes (Garmin
+   is rate-limited) — that is expected; let it finish, then re-read the latest date.
+
+3. **On sync failure** (the command errors, or the range still does not reach yesterday): do NOT
+   fabricate a plan. Fall back to the existing empty-DB / unsynced guardrail in §4, and if you still
+   proceed on the most recent synced day, caveat every number with an explicit "as of <latest date>"
+   so the athlete knows the call is not built on today's data. Keep the guardrail intact.
+
+If the latest date already reaches yesterday (or `<date>`), the DB is fresh — skip the sync and
+continue.
+
+### 3.1 Deterministic reads
 
 **Readiness** (recovery state for the target day):
 
@@ -69,6 +102,40 @@ HR, ACWR) so the prescription is grounded in what they have actually been doing:
 ~/.runforlife/athletes/<athlete>/metrics.db
 ```
 
+**Scheduled interval-block plan** — read the active training template so today's call ALIGNS to the
+block the athlete is actually on (not an invented one):
+
+```bash
+cat ~/.runforlife/athletes/<athlete>/ephemeral.json
+```
+
+The plan lives in `items[].content` as **free text** (e.g. an INTERVAL BLOCK with a weekly template
+like `Mon rest+mobility | Tue QUALITY | Wed leg day+easy | ... | Sun long run easy`, a 4-week rep/pace
+split, and easy/long-run paces). Only honor items whose `expires_on` is **not yet past** `<date>`;
+ignore expired items. Do NOT parse or reinterpret the numbers yourself — pass the raw non-expired
+`content` verbatim to the training-specialist and let it work out (a) which weekday `<date>` maps to
+in the template (quality / leg / long / rest slot), and (b) which week of the 4-week split is current,
+so it reads off the prescribed reps/paces rather than inventing them. If there is no non-expired
+interval-block item, say so and let the specialist fall back to goal-phase defaults.
+
+**Last 7 days of completed sessions** — read what the athlete has ALREADY trained this week so today's
+call does not double up (e.g. don't prescribe a second quality session if this week's was already run):
+
+```bash
+sqlite3 -header -column ~/.runforlife/athletes/<athlete>/metrics.db \
+  "SELECT date, ran_today, run_distance_km, run_avg_pace_sec_per_km, run_avg_hr,
+          run_avg_cadence, run_efficiency_factor, acwr
+   FROM daily_metrics
+   WHERE user_id = '<athlete>' AND date >= date('<date>', '-7 days') AND date <= '<date>'
+   ORDER BY date;"
+```
+
+There is **no** `run_duration` column — derive duration deterministically as
+`run_distance_km * run_avg_pace_sec_per_km / 3600` (hours). Pass these rows to the training-specialist
+so it can tell, numbers-first, which of this week's template slots (especially the QUALITY session)
+have already been completed and adjust today's prescription accordingly. Do not do this arithmetic in
+the LLM — hand the rows and the derivation rule to the specialist.
+
 ## 4. Empty-DB guardrail (carry verbatim — do NOT skip)
 
 If the readiness or banister scripts error, return no score, or the metrics DB has no rows, the
@@ -86,7 +153,13 @@ target date explicitly, and ask for their domain call for today:
 - **recovery-specialist** — assess `<athlete>` for `<date>` and return its REST / EASY / GO call
   with the readiness score, tier, and the 2-3 driving metrics.
 - **training-specialist** — assess `<athlete>` for `<date>` and return the next-session
-  prescription (type, distance, target pace, HR zone) gated by ACWR band and goal phase.
+  prescription (type, distance, target pace, HR zone) gated by ACWR band and goal phase. Pass it,
+  in the prompt text, (a) the raw non-expired scheduled interval-block `content` from §3.1 so it
+  aligns today to the correct weekday slot and 4-week split week, and (b) the last-7-days completed
+  sessions rows plus the duration derivation rule so it knows what has already been trained this
+  week (especially whether the QUALITY session is already done) and does not double-prescribe.
+  Numbers-first, no-heat: never explain pace/EF/HR via heat or temperature, and never gate on
+  `run_temp_c`.
 
 Each runs in isolated context, so the athlete name and date MUST be in the prompt text — they are
 not inherited.

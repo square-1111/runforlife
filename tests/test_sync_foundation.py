@@ -5,7 +5,7 @@ Covers:
   - has_complete_day() — the gap-row fix (skeleton rows are NOT complete)
   - upsert_day() preserves manually-entered subjective fields on re-ingest
     (the INSERT OR REPLACE data-loss bug)
-  - _build_document() populates run_is_indoor + run_temp_c
+  - _build_document() populates run_is_indoor
   - RUNFORLIFE_HOME env override
 
 All storage is redirected to a tmp dir — never touches real ~/.runforlife.
@@ -115,12 +115,11 @@ def _raw_with_run(type_key, dist_m=5000, speed=2.8, hr=130, tmin=None, tmax=None
     return {"sleep": None, "hrv": None, "summary": None, "vo2max": None, "activities": [activity]}
 
 
-def test_outdoor_run_flags_not_indoor_and_captures_temp(sandbox):
+def test_outdoor_run_flags_not_indoor(sandbox):
     from runforlife.sync.ingest import _build_document
 
     doc = _build_document("tezuesh", "2026-06-06", _raw_with_run("running", tmin=34, tmax=37))
     assert doc.run_is_indoor is False
-    assert doc.run_temp_c == 35.5
 
 
 def test_treadmill_run_flags_indoor(sandbox):
@@ -128,17 +127,9 @@ def test_treadmill_run_flags_indoor(sandbox):
 
     doc = _build_document("tezuesh", "2026-06-02", _raw_with_run("treadmill_running", tmin=30, tmax=32))
     assert doc.run_is_indoor is True
-    assert doc.run_temp_c == 31.0
 
 
-def test_run_temp_none_when_absent(sandbox):
-    from runforlife.sync.ingest import _build_document
-
-    doc = _build_document("tezuesh", "2026-06-07", _raw_with_run("running"))
-    assert doc.run_temp_c is None
-
-
-def test_env_fields_round_trip_through_db(sandbox):
+def test_env_field_round_trips_through_db(sandbox):
     from runforlife.storage import metrics_store
     from runforlife.sync.ingest import _build_document
 
@@ -146,7 +137,6 @@ def test_env_fields_round_trip_through_db(sandbox):
     metrics_store.upsert_day("tezuesh", doc)
     row = metrics_store.get_day("tezuesh", "2026-06-08")
     assert row["run_is_indoor"] == 1
-    assert row["run_temp_c"] == 30.0
 
 
 def test_efficiency_factor_computed_at_ingest(sandbox):

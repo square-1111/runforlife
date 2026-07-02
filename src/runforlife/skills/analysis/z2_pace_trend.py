@@ -2,10 +2,11 @@
 Zone-2 aerobic-progress trend.
 
 Answers the base-builder's core question — "is my easy/Z2 pace getting faster at
-the same heart rate?" — which raw pace cannot answer when effort is held down
-(heat, base phase). Uses Efficiency Factor (speed/HR) and pace normalised to a
-fixed reference HR, split by indoor vs outdoor because outdoor pace is
-heat-confounded. Returns numbers; the coach narrates.
+the same heart rate?" — which raw pace cannot answer when effort is held down in
+the base phase. Uses Efficiency Factor (speed/HR) and pace normalised to a fixed
+reference HR, split by indoor vs outdoor because treadmill pace is set (not
+GPS-measured) and trends separately from outdoor pace. Returns numbers; the coach
+narrates.
 """
 
 from datetime import date
@@ -54,10 +55,10 @@ class Z2PaceTrend(Skill):
     description = (
         "Aerobic-progress trend for easy/Zone-2 runs: is the athlete getting faster "
         "at the same heart rate? Uses Efficiency Factor (speed/HR) and pace normalised "
-        "to a reference HR, split into indoor (treadmill) vs outdoor because outdoor pace "
-        "is heat-confounded. Use when the athlete asks 'is my Z2 pace improving?', "
-        "'am I getting fitter?', 'is my easy pace dropping?', 'how's my aerobic base?'. "
-        "Outdoor comparisons should be read at matched temperature (run_temp_c is returned)."
+        "to a reference HR, split into indoor (treadmill) vs outdoor because treadmill "
+        "pace is set, not GPS-measured, and trends separately. Use when the athlete asks "
+        "'is my Z2 pace improving?', 'am I getting fitter?', 'is my easy pace dropping?', "
+        "'how's my aerobic base?'."
     )
 
     input_schema = {
@@ -99,7 +100,6 @@ class Z2PaceTrend(Skill):
                 "pace": _fmt_pace(pace),
                 "hr": hr,
                 "ef": ef,
-                "temp_c": r.get("run_temp_c"),
             }
             (indoor if r.get("run_is_indoor") else outdoor).append(entry)
 
@@ -109,9 +109,10 @@ class Z2PaceTrend(Skill):
             "window_weeks": weeks,
             "z2_band": {"hr_low": hr_low, "hr_high": hr_high, "ref_hr": ref_hr},
             "note": (
-                "EF = speed(m/min)/HR; higher = fitter. Indoor (treadmill) is the clean "
-                "fitness signal. Outdoor EF is heat-confounded — compare only at matched "
-                "run_temp_c. pace_at_ref_* is pace held at ref_hr, first vs last run."
+                "EF = speed(m/min)/HR; higher = fitter. Indoor (treadmill, set pace) and "
+                "outdoor (GPS pace) trend separately, so they are reported as two buckets. "
+                "Compare EF on like-for-like runs; pace_at_ref_* is pace held at ref_hr, "
+                "first vs last run."
             ),
             "indoor": _summarise(indoor, ref_hr),
             "outdoor": _summarise(outdoor, ref_hr),
