@@ -29,7 +29,7 @@ def sandbox(tmp_path, monkeypatch):
 
 def _lap(distance_m=1000.0, duration_sec=300.0, speed_mps=3.0,
          avg_hr=160, max_hr=172):
-    """A mock Garmin lap/split dict shaped like get_activity_split_summaries."""
+    """A mock Garmin lap dict shaped like a get_activity_splits lapDTO."""
     return {
         "distance": distance_m,
         "duration": duration_sec,
@@ -136,12 +136,16 @@ def test_parse_laps_from_lap_dtos(sandbox):
     assert laps[1]["lap_index"] == 1
 
 
-def test_parse_laps_handles_split_summaries_key(sandbox):
+def test_parse_laps_ignores_split_summaries(sandbox):
+    """splitSummaries are overlapping category ROLLUPS (RWD_RUN, INTERVAL_ACTIVE,
+    RWD_WALK, ...) — the same meters counted under multiple types. They are NOT
+    per-lap data and must never be ingested as laps (that double-counted the
+    distance ~2x). Only lapDTOs from get_activity_splits are real laps.
+    """
     from runforlife.sync.ingest import _parse_laps
 
-    raw = _splits([_lap()], key="splitSummaries")
-    laps = _parse_laps(raw)
-    assert len(laps) == 1
+    raw = _splits([_lap(), _lap()], key="splitSummaries")
+    assert _parse_laps(raw) == []
 
 
 def test_parse_laps_empty_when_no_laps(sandbox):
