@@ -89,9 +89,14 @@ def collect_day(user: str, date: str, delay_seconds: float = 0.3) -> dict:
     # not change any of the daily aggregate sources above, and is intentionally
     # NOT in SOURCE_KEYS so a missing/failed splits fetch never affects whether a
     # day counts as having data.
+    #
+    # Use get_activity_splits (returns lapDTOs = real per-lap detail), NOT
+    # get_activity_split_summaries — the latter returns overlapping category
+    # rollups (RWD_RUN, INTERVAL_ACTIVE, RWD_WALK, ...) that count the same
+    # meters under multiple types and double-counted the distance ~2x.
     run_activity_id = _main_run_activity_id(results.get("activities"))
     if run_activity_id is not None:
-        _fetch("run_splits", garmin.get_activity_split_summaries, run_activity_id)
+        _fetch("run_splits", garmin.get_activity_splits, run_activity_id)
         results["run_activity_id"] = run_activity_id
 
     errored = [k for k, v in provenance.items() if v.startswith("error")]

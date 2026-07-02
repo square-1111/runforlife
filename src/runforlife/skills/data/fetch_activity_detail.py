@@ -64,10 +64,12 @@ class FetchActivityDetail(Skill):
 
         splits = []
         try:
-            splits_raw = garmin.get_activity_split_summaries(activity_id)
+            # get_activity_splits → real per-lap lapDTOs. NOT split_summaries,
+            # which are overlapping category rollups that double-count distance.
+            splits_raw = garmin.get_activity_splits(activity_id)
             lap_list = []
             if isinstance(splits_raw, dict):
-                lap_list = splits_raw.get("lapDTOs") or splits_raw.get("splitSummaries") or []
+                lap_list = splits_raw.get("lapDTOs") or []
             for i, lap in enumerate(lap_list[:20]):
                 splits.append({
                     "lap": i + 1,

@@ -101,16 +101,21 @@ def _persist_activity_sessions(user: str, date: str, activities: list) -> None:
 
 
 def _parse_laps(splits_raw) -> list[dict]:
-    """Normalize a Garmin split-summary payload into a list of lap dicts.
+    """Normalize a Garmin get_activity_splits payload into a list of lap dicts.
 
-    Accepts the dict returned by get_activity_split_summaries(activity_id),
-    which carries laps under 'lapDTOs' (or 'splitSummaries'). Returns one dict
-    per lap with: lap_index, distance_km, duration_sec, avg_pace_sec_per_km,
-    avg_hr, max_hr. Pure — no network, safe on None/empty/missing keys.
+    Accepts the dict returned by get_activity_splits(activity_id), which carries
+    the real per-lap detail under 'lapDTOs'. Returns one dict per lap with:
+    lap_index, distance_km, duration_sec, avg_pace_sec_per_km, avg_hr, max_hr.
+    Pure — no network, safe on None/empty/missing keys.
+
+    'splitSummaries' (from get_activity_split_summaries) is deliberately IGNORED:
+    those are overlapping category rollups (RWD_RUN, INTERVAL_ACTIVE, RWD_WALK,
+    ...) that count the same meters under multiple types, which double-counted
+    the distance ~2x when treated as laps.
     """
     if not isinstance(splits_raw, dict):
         return []
-    lap_list = splits_raw.get("lapDTOs") or splits_raw.get("splitSummaries") or []
+    lap_list = splits_raw.get("lapDTOs") or []
     if not isinstance(lap_list, list):
         return []
 
