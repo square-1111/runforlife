@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """
-Initialise a new athlete under ~/.runforlife/athletes/<user>/.
+Initialise a new athlete under RUNFORLIFE_HOME/athletes/<handle>/.
 
-Creates the athlete dir and a tokens/ subdir (mode 0700), then seeds a
-template profile.json plus empty insights/ephemeral/feedback files. Existing
-files are left untouched, so this is safe to re-run.
+Writes a full, valid profile.json (a caller-supplied dict verbatim, or a
+sensible default built from name/gender/units) plus empty insights/ephemeral/
+feedback files. Existing files are left untouched, so this is safe to re-run.
+
+Does NOT create a tokens/ subdir under the athlete: Garmin auth writes cached
+tokens to repo/tokens/<handle>/ (config.TOKENS_DIR), so the per-athlete tokens
+dir under ~/.runforlife was dead and only caused confusion.
 
 Run from the repo root with:
-    uv run python runforlife-coach/scripts/athlete_init.py --user <name>
+    uv run python ./runforlife-coach/scripts/athlete_init.py --user <handle> [--name ...]
+Or pass a fully-assembled profile (used by /onboard):
+    ... --user <handle> --profile-file /path/to/profile.json
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -23,18 +30,32 @@ from runforlife.storage.paths import (  # noqa: E402
     feedback_path,
     insights_path,
     profile_path,
-    tokens_dir,
 )
 
+DEFAULT_WATCH = "Garmin Forerunner 165"
 
-def _template_profile(user: str) -> dict:
-    """Minimal profile skeleton the athlete can flesh out by hand."""
+
+def build_default_profile(
+    handle: str,
+    *,
+    name: str | None = None,
+    gender: str | None = None,
+    units: str = "metric",
+    watch: str = DEFAULT_WATCH,
+) -> dict:
+    """A minimal-but-valid profile matching the shape the playbooks read.
+
+    Goals are left empty (collected progressively after first value); the coach
+    still works day one. `garmin_user` must equal the handle — that's the key
+    the sync/auth layer uses.
+    """
     return {
-        "name": user,
-        "age": None,
-        "watch": "Garmin Forerunner 165",
+        "name": name or handle,
+        "gender": gender,
+        "garmin_user": handle,
         "goals": {},
-        "prefs": {},
+        "context": {"watch": watch},
+        "prefs": {"units": units},
     }
 
 
@@ -46,24 +67,49 @@ def _seed(path: Path, data: dict, label: str) -> None:
     print(f"  created {label} -> {path}")
 
 
+def init_athlete(handle: str, *, profile: dict | None = None, **profile_fields) -> None:
+    """Scaffold an athlete's dir + profile + empty memory files (idempotent).
+
+    `profile` (a full dict) is written verbatim; otherwise a default is built
+    from `profile_fields` (name / gender / units / watch).
+    """
+    base = athlete_dir(handle)
+    print(f"Initialising athlete '{handle}' at {base}")
+
+    prof = profile if profile is not None else build_default_profile(handle, **profile_fields)
+    _seed(profile_path(handle), prof, "profile.json")
+    _seed(insights_path(handle), {"insights": []}, "insights.json")
+    _seed(ephemeral_path(handle), {"items": []}, "ephemeral.json")
+    _seed(feedback_path(handle), {"items": []}, "feedback.json")
+    print("Done.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Initialise a new athlete.")
-    parser.add_argument("--user", required=True, help="Athlete name.")
+    parser.add_argument("--user", required=True, help="Athlete handle.")
+    parser.add_argument("--name", default=None, help="Display name (default: handle).")
+    parser.add_argument("--gender", default=None, help="male / female / other.")
+    parser.add_argument("--units", default="metric", help="metric or imperial.")
+    parser.add_argument("--watch", default=DEFAULT_WATCH, help="Watch model.")
+    parser.add_argument(
+        "--profile-file", default=None,
+        help="Path to a JSON file with a full profile dict to write verbatim "
+             "(overrides the field flags). Used by /onboard.",
+    )
     args = parser.parse_args()
-    user = args.user
 
-    base = athlete_dir(user)
-    print(f"Initialising athlete '{user}' at {base}")
+    profile = None
+    if args.profile_file:
+        profile = json.loads(Path(args.profile_file).read_text(encoding="utf-8"))
 
-    tdir = tokens_dir(user)
-    print(f"  tokens dir ready (mode 0700) -> {tdir}")
-
-    _seed(profile_path(user), _template_profile(user), "profile.json")
-    _seed(insights_path(user), {"insights": []}, "insights.json")
-    _seed(ephemeral_path(user), {"items": []}, "ephemeral.json")
-    _seed(feedback_path(user), {"items": []}, "feedback.json")
-
-    print("Done.")
+    init_athlete(
+        args.user,
+        profile=profile,
+        name=args.name,
+        gender=args.gender,
+        units=args.units,
+        watch=args.watch,
+    )
 
 
 if __name__ == "__main__":
