@@ -19,11 +19,11 @@ You do NOT interpret, advise, or write anything — you fetch and return structu
 
 1. **Readiness** (optionally for a given `--date`):
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete>
    ```
 2. **Banister** (fitness / fatigue / form):
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.banister --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.banister --user <athlete>
    ```
 3. **Recent training** — read recent rows (distance, pace, avg HR, ACWR inputs) from:
    ```

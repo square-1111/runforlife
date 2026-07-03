@@ -12,7 +12,7 @@ subjective wellness, resting HR). It is computed in Python, not by reasoning. Yo
 ## The command (run this EXACTLY)
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete> [--date YYYY-MM-DD]
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete> [--date YYYY-MM-DD]
 ```
 
 - Replace `<athlete>` with the active athlete name (`tezuesh` or `kakul`). The active athlete is

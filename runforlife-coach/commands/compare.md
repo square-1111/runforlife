@@ -25,7 +25,7 @@ Do NOT write anything and do NOT touch `~/.runforlife/active_athlete`. Run this 
 is active:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && for A in tezuesh kakul; do
+cd "$(cat ~/.runforlife/repo_path)" && for A in tezuesh kakul; do
   echo "=== $A ==="
   uv run python3 -c "
 import sqlite3, pathlib, json

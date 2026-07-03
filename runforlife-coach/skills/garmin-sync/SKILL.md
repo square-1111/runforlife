@@ -24,7 +24,7 @@ sync as a catch-up for gaps (missed nights, fresh date ranges, first-time setup)
 Run from the repo root:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly --user <athlete> [--start YYYY-MM-DD --end YYYY-MM-DD]
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.sync.nightly --user <athlete> [--start YYYY-MM-DD --end YYYY-MM-DD]
 ```
 
 - `<athlete>` — `tezuesh` or `kakul` (use the active athlete unless told otherwise).
@@ -32,7 +32,7 @@ cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sy
 - `--start` / `--end` sync an inclusive date range, e.g. to backfill a gap:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly --user tezuesh --start 2026-05-25 --end 2026-06-02
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.sync.nightly --user tezuesh --start 2026-05-25 --end 2026-06-02
 ```
 
 Already-ingested days are skipped automatically, so re-running is safe and cheap.
@@ -47,7 +47,7 @@ interactively**, because Garmin may require MFA (an emailed/authenticator code t
 cannot be answered headlessly). Run:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.auth <athlete>
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.auth <athlete>
 ```
 
 This reads `GARMIN_EMAIL_<ATHLETE>` / `GARMIN_PASSWORD_<ATHLETE>` from `.env`,

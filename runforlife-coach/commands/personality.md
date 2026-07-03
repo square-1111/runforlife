@@ -36,7 +36,7 @@ Hold the resolved name as `<athlete>` for the next step.
 Run this from the repo root, substituting the resolved `<athlete>`:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "import json,sys; from runforlife.storage.personality_store import load_personality, coaching_style_block; u=sys.argv[1]; m=load_personality(u); print(json.dumps(m, indent=2)); print(); print(coaching_style_block(u) or '(no style block yet — confidence < 0.2)')" <athlete>
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -c "import json,sys; from runforlife.storage.personality_store import load_personality, coaching_style_block; u=sys.argv[1]; m=load_personality(u); print(json.dumps(m, indent=2)); print(); print(coaching_style_block(u) or '(no style block yet — confidence < 0.2)')" <athlete>
 ```
 
 This prints two things:

@@ -51,7 +51,7 @@ init/migration scripts, then **STOP**. The profile is static — READ it, never 
 Before computing anything from the metrics DB, confirm there is synced data. Run:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python3 -c "import sqlite3,pathlib; \
+cd "$(cat ~/.runforlife/repo_path)" && uv run python3 -c "import sqlite3,pathlib; \
 p=pathlib.Path.home()/'.runforlife/athletes/<athlete>/metrics.db'; \
 print(0) if not p.exists() else print(sqlite3.connect(str(p)).execute('SELECT COUNT(*) FROM daily_metrics WHERE user_id=?',['<athlete>']).fetchone()[0])"
 ```
@@ -106,7 +106,7 @@ where `ran_today=1`, then compare against the linear target-for-today (the goal 
 far through the year we are).
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python3 -c "import sqlite3,datetime,json,pathlib; \
+cd "$(cat ~/.runforlife/repo_path)" && uv run python3 -c "import sqlite3,datetime,json,pathlib; \
 prof=json.load(open(pathlib.Path.home()/'.runforlife/athletes/<athlete>/profile.json')); \
 ard=prof['goals']['annual_run_days']; target=ard['target']; year=ard['year']; \
 today=datetime.date.today(); \

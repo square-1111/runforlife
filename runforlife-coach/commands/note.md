@@ -49,13 +49,13 @@ athlete name for `<athlete>` and the parsed note for `<content>`:
 - **Without an expiry:**
 
   ```bash
-  cd /Users/tezueshvarshney/work/test/runforlife && uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py --user <athlete> --add-ephemeral --content "<content>"
+  cd "$(cat ~/.runforlife/repo_path)" && uv run python ./runforlife-coach/scripts/memory_manager.py --user <athlete> --add-ephemeral --content "<content>"
   ```
 
 - **With an expiry** (only when an `expires:YYYY-MM-DD` token was parsed):
 
   ```bash
-  cd /Users/tezueshvarshney/work/test/runforlife && uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py --user <athlete> --add-ephemeral --content "<content>" --expires-on YYYY-MM-DD
+  cd "$(cat ~/.runforlife/repo_path)" && uv run python ./runforlife-coach/scripts/memory_manager.py --user <athlete> --add-ephemeral --content "<content>" --expires-on YYYY-MM-DD
   ```
 
 The script prints the new ephemeral id on success.

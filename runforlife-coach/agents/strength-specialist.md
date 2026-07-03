@@ -44,7 +44,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    data — strength / SkiErg / sled / HIIT / cycling each land here):
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "import datetime, json; from runforlife.storage import metrics_store; end=datetime.date.today().isoformat(); start=(datetime.date.today()-datetime.timedelta(days=28)).isoformat(); print(json.dumps(metrics_store.get_activity_sessions('<athlete>', start, end), indent=2))"
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -c "import datetime, json; from runforlife.storage import metrics_store; end=datetime.date.today().isoformat(); start=(datetime.date.today()-datetime.timedelta(days=28)).isoformat(); print(json.dumps(metrics_store.get_activity_sessions('<athlete>', start, end), indent=2))"
    ```
 
    Each row carries `{date, activity_type, start, duration_min, avg_hr, max_hr,
@@ -56,7 +56,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    the optional per-station targets/PBs map:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "import json; from runforlife.storage import profile_store; print(json.dumps(profile_store.get_hyrox_stations('<athlete>'), indent=2))"
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -c "import json; from runforlife.storage import profile_store; print(json.dumps(profile_store.get_hyrox_stations('<athlete>'), indent=2))"
    ```
 
    Each station may carry `{target_sec, pb_sec}` (e.g. `ski_erg`, `sled_push`).

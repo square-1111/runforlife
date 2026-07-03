@@ -22,7 +22,7 @@ Run this — it reads the last N weeks read-only and prints a sparkline row per 
 straight from `daily_metrics`; the rendering uses the project's `render_row` helper so it's consistent:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python3 -c "
+cd "$(cat ~/.runforlife/repo_path)" && uv run python3 -c "
 import sqlite3, pathlib, sys
 sys.path.insert(0, 'src')
 from runforlife.skills.analysis.sparkline import render_row

@@ -85,35 +85,35 @@ Prefer the CLI below for routine inspect/modify so behavior stays consistent and
 
 ## CLI — `memory_manager.py`
 
-Run from the repo root (`/Users/tezueshvarshney/work/test/runforlife`). Replace `<a>` with the
-active athlete (`tezuesh` or `kakul`).
+Run from the repo root (`cd "$(cat ~/.runforlife/repo_path)"`). Replace `<a>` with the
+active athlete's handle.
 
 ```bash
 # Inspect everything for an athlete (all 4 files)
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py --user <a> --list
+uv run python ./runforlife-coach/scripts/memory_manager.py --user <a> --list
 
 # Show one category (profile | insights | ephemeral | feedback)
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py --user <a> --show insights
+uv run python ./runforlife-coach/scripts/memory_manager.py --user <a> --show insights
 
 # Add a discovered insight (only when evidenced)
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py \
+uv run python ./runforlife-coach/scripts/memory_manager.py \
   --user <a> --add-insight "Readiness drops sharply after <6h sleep" --type recovery --confidence 0.5
 
 # Add a time-boxed ephemeral fact (always set an expiry; see TTL rule)
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py \
+uv run python ./runforlife-coach/scripts/memory_manager.py \
   --user <a> --add-ephemeral "Travelling to Berlin, limited running" --expires-on 2026-06-14
 
 # Add feedback on advice the athlete reacted to
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py \
+uv run python ./runforlife-coach/scripts/memory_manager.py \
   --user <a> --add-feedback "Suggested easy day after poor sleep" --advice-type recovery \
   --rating positive --adherence followed --outcome "felt fresh next session"
 
 # Delete a single entry by id from a category
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py \
+uv run python ./runforlife-coach/scripts/memory_manager.py \
   --user <a> --delete insights --id 3
 
 # Prune expired ephemeral entries (also runs automatically at SessionStart)
-uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py \
+uv run python ./runforlife-coach/scripts/memory_manager.py \
   --user <a> --prune-expired
 ```
 

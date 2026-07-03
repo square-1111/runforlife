@@ -76,7 +76,7 @@ DB silently poisons every lens with "as of last week" numbers dressed up as toda
    from the day after the latest date through today:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly --user <athlete> --start <day-after-latest> --end <today>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.sync.nightly --user <athlete> --start <day-after-latest> --end <today>
    ```
 
    This can take a moment — Garmin is rate-limited, so a multi-day range runs for a while.
@@ -84,7 +84,7 @@ DB silently poisons every lens with "as of last week" numbers dressed up as toda
 
 3. **If the sync fails** (e.g. `[AUTH FAILED]`, a traceback, or a non-zero exit): fall back to the
    existing behaviour. Do NOT fabricate today's numbers. Tell the athlete the data looks unsynced,
-   note it may need a re-auth (`cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m
+   note it may need a re-auth (`cd "$(cat ~/.runforlife/repo_path)" && uv run python -m
    runforlife.auth <athlete>`), and proceed with an explicit **"as of `<latest date>`"** caveat on
    every figure so nothing pretends to be current.
 
@@ -237,7 +237,7 @@ the training + strength push and their goal-phase rationale, and **any active
 `training_directives.intensity_cap`** from the profile (e.g. a `zone2_only` running cap with its
 `until` date) so the arbiter applies Rule 1.5 and never up-rates a Z2-capped athlete on a running
 session. It applies the editable priority ladder at
-`/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md` and returns ONE
+`./runforlife-coach/conflict-rules.md` and returns ONE
 decision naming which rule fired. Use that decision as the panel's verdict, and name the winning
 rule in the answer.
 

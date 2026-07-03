@@ -33,7 +33,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    never compute load or fitness/fatigue yourself, the LLM does no arithmetic:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.banister --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.banister --user <athlete>
    ```
 
    It prints JSON describing the fitness/fatigue state. Use it to read whether
@@ -43,7 +43,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    history (distance, pace, avg HR, ACWR per day) instead of guessing:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete>
    ```
 
    The readiness JSON `components` carry today's recovery state, which gates how

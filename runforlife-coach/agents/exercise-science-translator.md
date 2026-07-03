@@ -47,7 +47,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    scripts and read-only SQL rather than reasoning numbers out in your head:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete>
    ```
 
    The readiness JSON `components` carry HRV state (`hrv`, `hrv_downtrend`,

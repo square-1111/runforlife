@@ -87,7 +87,7 @@ Read these for `<athlete>` so the plan is anchored, not generic:
   covers only the REMAINING days and never double-books a session already run:
 
   ```bash
-  cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "
+  cd "$(cat ~/.runforlife/repo_path)" && uv run python -c "
   import sqlite3, datetime, os
   a='<athlete>'
   db=os.path.expanduser(f'~/.runforlife/athletes/{a}/metrics.db')
@@ -116,7 +116,7 @@ The plan must be built on **fresh volume/ACWR**, so bring the DB current first. 
 latest ingested date:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -c "
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -c "
 import sqlite3, os
 a='<athlete>'
 db=os.path.expanduser(f'~/.runforlife/athletes/{a}/metrics.db')
@@ -134,7 +134,7 @@ Let `latest` be that value and `yesterday` = today − 1 day. Then:
   AFTER `latest` through today:
 
   ```bash
-  cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly --user <athlete> --start <day-after-latest> --end <today>
+  cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.sync.nightly --user <athlete> --start <day-after-latest> --end <today>
   ```
 
   Compute `<day-after-latest>` deterministically, e.g. `python3 -c "import datetime;

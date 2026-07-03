@@ -20,7 +20,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    script — never compute scores yourself, the LLM does no arithmetic:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.banister --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.banister --user <athlete>
    ```
 
    It prints JSON: `{fitness, fatigue, tsb, trend, overreaching_risk, summary}`.

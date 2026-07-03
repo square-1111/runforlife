@@ -36,7 +36,7 @@ This pointer is sticky — it survives across sessions until the next `/switch`.
 Run a fresh prune so stale travel/injury/life notes never poison advice. Run from the repo root:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/scripts/memory_manager.py --user $ARGUMENTS --prune-expired
+cd "$(cat ~/.runforlife/repo_path)" && uv run python ./runforlife-coach/scripts/memory_manager.py --user $ARGUMENTS --prune-expired
 ```
 
 Report how many entries were pruned (the script prints this).

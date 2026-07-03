@@ -30,7 +30,7 @@ given. (If a needed number is missing from the prompt, say so and lean conservat
 1. **Read the priority ladder.** Always read the current rules — they are user-editable:
 
    ```
-   /Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md
+   ./runforlife-coach/conflict-rules.md
    ```
 
    If you were not handed the athlete's `training_directives`, read the profile so you can

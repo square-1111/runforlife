@@ -92,7 +92,7 @@ Handle them with a real parallel fan-out:
    from the profile (e.g. a `zone2_only` running cap with its `until` date) so the
    arbiter applies Rule 1.5 and never up-rates a Z2-capped athlete to intervals on
    a running session. It applies the editable priority ladder at
-   `/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md`
+   `./runforlife-coach/conflict-rules.md`
    and returns ONE decision naming which rule fired.
 
 4. **Present the arbitrated answer.** Relay the resolver's decision, and always

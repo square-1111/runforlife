@@ -19,7 +19,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    never compute scores yourself, the LLM does no arithmetic:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete>
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete>
    ```
 
    It prints JSON: `{score, tier, conflict_detected, components}`. Read the
@@ -58,7 +58,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
    row is behind the requested date — check it directly:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && sqlite3 ~/.runforlife/athletes/<athlete>/metrics.db "SELECT max(date) FROM daily_metrics WHERE ran_today IS NOT NULL OR hrv_last_night IS NOT NULL;"
+   cd "$(cat ~/.runforlife/repo_path)" && sqlite3 ~/.runforlife/athletes/<athlete>/metrics.db "SELECT max(date) FROM daily_metrics WHERE ran_today IS NOT NULL OR hrv_last_night IS NOT NULL;"
    ```
 
    When you see the stale signature (or `max(date)` is older than the requested
@@ -73,7 +73,7 @@ The athlete name is passed explicitly in your prompt (e.g. "tezuesh" or
       as **trend-based, not same-day**:
 
       ```bash
-      cd /Users/tezueshvarshney/work/test/runforlife && sqlite3 -header ~/.runforlife/athletes/<athlete>/metrics.db "SELECT date, hrv_last_night, resting_hr, sleep_score, body_battery_end, stress_avg, acwr FROM daily_metrics WHERE hrv_last_night IS NOT NULL ORDER BY date DESC LIMIT 1;"
+      cd "$(cat ~/.runforlife/repo_path)" && sqlite3 -header ~/.runforlife/athletes/<athlete>/metrics.db "SELECT date, hrv_last_night, resting_hr, sleep_score, body_battery_end, stress_avg, acwr FROM daily_metrics WHERE hrv_last_night IS NOT NULL ORDER BY date DESC LIMIT 1;"
       ```
 
    This is deterministic: the numbers still come from the DB (numbers-first

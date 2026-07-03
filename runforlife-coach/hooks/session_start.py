@@ -47,6 +47,36 @@ def _ensure_src_on_path() -> None:
         sys.path.insert(0, src)
 
 
+def _write_repo_path() -> None:
+    """Persist the repo root so slash commands can locate the backend portably.
+
+    Commands can't rely on ${CLAUDE_PLUGIN_ROOT} (it's substituted only in hook
+    definitions, not in Bash the model runs from a command body), so they read
+    this file instead: `cd "$(cat ~/.runforlife/repo_path)"`. Written on every
+    session start BEFORE any early-exit, so it's available even on a fresh,
+    no-athlete install (where /onboard itself needs it). Never crashes.
+    """
+    try:
+        home = Path.home() / ".runforlife"
+        home.mkdir(parents=True, exist_ok=True)
+        (home / "repo_path").write_text(str(_REPO_ROOT), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - never crash the session
+        print(f"[RunForLife] (warning: could not write repo_path: {exc})")
+
+
+def _no_athlete_message(roster: list[str]) -> str:
+    """Guidance when no athlete is active: onboard a fresh install, else switch."""
+    if roster:
+        return (
+            "[RunForLife] No active athlete set. "
+            f"Run /switch <{'|'.join(roster)}> to load an athlete's coaching context."
+        )
+    return (
+        "[RunForLife] Welcome! No athlete is set up yet. "
+        "Run /onboard to create your coaching profile and connect Garmin."
+    )
+
+
 def _read_active_athlete() -> str | None:
     """Return the active athlete name, or None if unset/empty/missing."""
     from runforlife.storage.paths import active_athlete_file
@@ -265,12 +295,18 @@ def main() -> int:
     try:
         _ensure_src_on_path()
 
+        # Persist the repo root FIRST — commands need it even on a fresh install
+        # with no athlete yet (so /onboard can locate the backend).
+        _write_repo_path()
+
         athlete = _read_active_athlete()
         if athlete is None:
-            print(
-                "[RunForLife] No active athlete set. "
-                "Run /switch <tezuesh|kakul> to load an athlete's coaching context."
-            )
+            try:
+                from runforlife.storage.paths import list_athletes
+                roster = list_athletes()
+            except Exception:  # noqa: BLE001 - package may not import; treat as fresh
+                roster = []
+            print(_no_athlete_message(roster))
             return 0
 
         # Prune expired ephemeral context before surfacing it (best-effort).

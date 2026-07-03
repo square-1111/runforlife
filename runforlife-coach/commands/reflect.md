@@ -26,7 +26,7 @@ If neither yields a valid athlete, **STOP** and reply: `No active athlete set. R
 ## 2. Pull the feedback stats (deterministic — do NOT tally yourself)
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/feedback_stats.py --user <athlete>
+cd "$(cat ~/.runforlife/repo_path)" && uv run python runforlife-coach/scripts/feedback_stats.py --user <athlete>
 ```
 
 This prints JSON: `{user, total_feedback, advice_types, by_advice_type: {<type>: {n, ratings:{...},
@@ -42,7 +42,7 @@ drive a conclusion.
 
 Also read, for context:
 - `~/.runforlife/athletes/<athlete>/insights.json` — patterns already learned.
-- `/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md` — current ladder.
+- `./runforlife-coach/conflict-rules.md` — current ladder.
 
 ## 3. Guard against premature conclusions
 
@@ -85,7 +85,7 @@ feedback but never recorded what it learned, so `insights.json` stayed empty.
 Run, with the same athlete name:
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/memory_manager.py \
+cd "$(cat ~/.runforlife/repo_path)" && uv run python runforlife-coach/scripts/memory_manager.py \
   --user <athlete> --add-insight \
   --insight "<one-line learning, tied to the numbers, e.g. 'tempo on Amber days succeeds (success_rate 0.83, n=6) — don't auto-downgrade'>" \
   --insight-type <recovery|pacing|training|adherence|...> \

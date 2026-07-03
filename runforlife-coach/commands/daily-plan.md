@@ -63,7 +63,7 @@ is and top it up automatically if it is stale.
    `<date>`/today), AUTOMATICALLY pull the missing range before doing anything else:
 
    ```bash
-   cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.sync.nightly \
+   cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.sync.nightly \
      --user <athlete> --start <day-after-latest> --end <today>
    ```
 
@@ -83,7 +83,7 @@ continue.
 **Readiness** (recovery state for the target day):
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.readiness --user <athlete>
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.readiness --user <athlete>
 ```
 
 If a `--date` was given, append it: `... -m runforlife.rag.readiness --user <athlete> --date <date>`.
@@ -92,7 +92,7 @@ Output JSON: `{score, tier, conflict_detected, components}`.
 **Banister** (fitness / fatigue / training-load state):
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python -m runforlife.rag.banister --user <athlete>
+cd "$(cat ~/.runforlife/repo_path)" && uv run python -m runforlife.rag.banister --user <athlete>
 ```
 
 **Recent training context** — read the synced metrics for recent run history (distance, pace, avg
@@ -179,7 +179,7 @@ injury/illness), the training prescription + its ACWR band and goal phase, and *
 `training_directives.intensity_cap`** from the profile (e.g. a `zone2_only` running cap with its
 `until` date) so the arbiter applies Rule 1.5 and never up-rates a Z2-capped athlete to intervals
 on a running session. It applies the editable priority ladder at
-`/Users/tezueshvarshney/work/test/runforlife/runforlife-coach/conflict-rules.md` and returns ONE
+`./runforlife-coach/conflict-rules.md` and returns ONE
 decision naming which rule fired. Use that decision as today's call, and name the winning rule in
 the rationale below.
 
@@ -209,7 +209,7 @@ etc. — record ONE feedback item so the self-evolution loop has fuel. Do this *
 reaction**; never fabricate outcomes to fill the file.
 
 ```bash
-cd /Users/tezueshvarshney/work/test/runforlife && uv run python runforlife-coach/scripts/memory_manager.py \
+cd "$(cat ~/.runforlife/repo_path)" && uv run python runforlife-coach/scripts/memory_manager.py \
   --user <athlete> --add-feedback \
   --advice-type <e.g. deload|tempo|rest_day|long_run> \
   --advice "<the call that was given>" \
