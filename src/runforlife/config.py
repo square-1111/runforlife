@@ -21,8 +21,8 @@ TOKENS_DIR = _PROJECT_ROOT / "tokens"
 # instead of touching the real ~/.runforlife (the 2026-06 data-loss failure class).
 RUNFORLIFE_HOME = Path(os.environ.get("RUNFORLIFE_HOME") or (Path.home() / ".runforlife"))
 
-# Supported users
-USERS = ("tezuesh", "kakul")
+# Athletes are discovered dynamically from disk — see
+# runforlife.storage.paths.list_athletes() (was a hardcoded USERS tuple).
 
 # Anthropic model
 MODEL = "claude-sonnet-4-20250514"

@@ -30,7 +30,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from runforlife.agent.core import Agent
-from runforlife.config import CONVERSATION_WINDOW, USERS
+from runforlife.config import CONVERSATION_WINDOW
+from runforlife.storage.paths import is_valid_athlete, list_athletes
 from runforlife.skills.registry import create_default_registry
 from runforlife.storage.conversation_db import load_recent, save_message
 from runforlife.storage.profile_store import build_system_prompt
@@ -69,8 +70,8 @@ def _check_api_key(request: Request) -> None:
 # ── App ────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Pre-warm agents for both users on startup
-    for user in USERS:
+    # Pre-warm agents for every configured athlete on startup
+    for user in list_athletes():
         _get_or_create_agent(user)
     yield
 
@@ -106,8 +107,8 @@ async def chat(
     body: ChatRequest,
     _: None = Depends(_check_api_key),
 ) -> ChatResponse:
-    if body.user not in USERS:
-        raise HTTPException(status_code=400, detail=f"Unknown user: {body.user}. Must be one of {USERS}")
+    if not is_valid_athlete(body.user):
+        raise HTTPException(status_code=400, detail=f"Unknown user: {body.user}. Must be one of {list_athletes()}")
 
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -130,7 +131,7 @@ async def health() -> HealthResponse:
     from runforlife.storage.metrics_store import count_days
 
     user_info = {}
-    for user in USERS:
+    for user in list_athletes():
         history = load_recent(user, n=2)
         user_info[user] = {
             "agent_loaded": user in _agents,
@@ -146,7 +147,7 @@ async def get_memories(
     user: str,
     _: None = Depends(_check_api_key),
 ) -> JSONResponse:
-    if user not in USERS:
+    if not is_valid_athlete(user):
         raise HTTPException(status_code=404, detail=f"Unknown user: {user}")
 
     from runforlife.storage.memory_store import list_memories

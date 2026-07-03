@@ -56,8 +56,7 @@ class GarminAuth(Skill):
         "properties": {
             "user": {
                 "type": "string",
-                "enum": ["tezuesh", "kakul"],
-                "description": "Which athlete to authenticate",
+                "description": "Which athlete (handle) to authenticate",
             }
         },
         "required": ["user"],

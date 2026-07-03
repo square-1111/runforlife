@@ -27,8 +27,9 @@ What is allowed: read-only cross-athlete access (SELECT/cat/read), bare mentions
 the /switch pointer write (~/.runforlife/active_athlete — not under athletes/),
 and anything touching only the active athlete.
 
-Roster is discovered from disk (∪ config.USERS ∪ a literal fallback) so a newly
-added athlete is guarded too, not silently unprotected.
+Roster is discovered dynamically from disk (∪ the active athlete) so a newly
+added athlete is guarded too, not silently unprotected — and no author handles
+are baked in, so the guard is correct on a friend's install.
 
 Fail-open is deliberate: an unexpected hook crash returns exit 0 rather than
 bricking the user's session. The structured checks below are the protection; a
@@ -43,9 +44,6 @@ from pathlib import Path
 # hooks/ -> runforlife-coach/ -> repo root -> src
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _SRC_DIR = _REPO_ROOT / "src"
-
-# Literal fallback roster — the guard must work even if the package can't import.
-_FALLBACK_ATHLETES = ("tezuesh", "kakul")
 
 # Mutating shell commands that, when targeting another athlete's dir, are writes.
 _MUTATING_CMDS = (
@@ -68,20 +66,21 @@ def _ensure_src_on_path() -> None:
 
 
 def _known_athletes() -> tuple[str, ...]:
-    """Roster = config.USERS ∪ on-disk athlete dirs ∪ literal fallback."""
-    names: set[str] = set(_FALLBACK_ATHLETES)
-    try:
-        _ensure_src_on_path()
-        from runforlife.config import USERS
-        names.update(USERS)
-    except Exception:  # noqa: BLE001 - package may not import; fallback stands
-        pass
+    """Roster = on-disk athlete dirs ∪ the active athlete.
+
+    Discovered dynamically from disk (no hardcoded names) so the guard is correct
+    on any machine — a friend's install has its own handles, not tezuesh/kakul.
+    """
+    names: set[str] = set()
     try:
         athletes_dir = Path.home() / ".runforlife" / "athletes"
         if athletes_dir.is_dir():
             names.update(p.name for p in athletes_dir.iterdir() if p.is_dir())
     except Exception:  # noqa: BLE001
         pass
+    active = _read_active_athlete()
+    if active:
+        names.add(active)
     return tuple(sorted(names))
 
 

@@ -25,8 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from runforlife.config import USERS  # noqa: E402
 from runforlife.storage.athlete_memory import atomic_write_json  # noqa: E402
+from runforlife.storage.paths import list_athletes  # noqa: E402
 from runforlife.storage.paths import (  # noqa: E402
     athlete_dir,
     banister_path,
@@ -158,13 +158,14 @@ def migrate_user(user: str, dry_run: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate legacy data into ~/.runforlife.")
-    parser.add_argument("--user", default=None, help="Single athlete (default: all USERS).")
+    parser.add_argument("--user", default=None, help="Single athlete (default: all configured).")
     parser.add_argument("--dry-run", action="store_true", help="Report without writing.")
     args = parser.parse_args()
 
-    users = (args.user,) if args.user else USERS
-    if args.user and args.user not in USERS:
-        print(f"Warning: '{args.user}' is not in USERS {USERS}; proceeding anyway.")
+    roster = list_athletes()
+    users = (args.user,) if args.user else tuple(roster)
+    if args.user and args.user not in roster:
+        print(f"Warning: '{args.user}' is not a configured athlete {roster}; proceeding anyway.")
 
     mode = "DRY RUN" if args.dry_run else "LIVE"
     print(f"RunForLife data migration [{mode}] for: {', '.join(users)}")

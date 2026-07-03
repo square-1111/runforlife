@@ -129,8 +129,7 @@ def main() -> int:
     parser.add_argument(
         "--user",
         required=True,
-        choices=config.USERS,
-        help="Athlete to compute Banister state for.",
+        help="Athlete handle to compute Banister state for.",
     )
     args = parser.parse_args()
 

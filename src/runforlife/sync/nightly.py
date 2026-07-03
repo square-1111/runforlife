@@ -24,7 +24,6 @@ from datetime import date, timedelta
 
 from dotenv import load_dotenv
 
-from runforlife.config import USERS
 from runforlife.skills.data.garmin_auth import GarminAuth
 from runforlife.storage.metrics_store import count_days, has_complete_day
 from runforlife.sync.ingest import ingest_day
@@ -88,6 +87,17 @@ def sync_user(user: str, start_date: str, end_date: str, force: bool = False) ->
     print(f"  Total days in DB: {count_days(user)}")
 
 
+def _resolve_users(user_arg: str) -> list[str]:
+    """Resolve the --user argument to a concrete list of handles.
+
+    'all' expands to the dynamic on-disk roster (not a hardcoded tuple); any
+    other value is taken as a single handle.
+    """
+    from runforlife.storage.paths import list_athletes
+
+    return list_athletes() if user_arg == "all" else [user_arg]
+
+
 def main() -> None:
     load_dotenv()
 
@@ -95,8 +105,7 @@ def main() -> None:
     parser.add_argument(
         "--user",
         required=True,
-        choices=list(USERS) + ["all"],
-        help="User to sync, or 'all' for both",
+        help="Handle to sync, or 'all' for every configured athlete",
     )
     parser.add_argument("--backfill", action="store_true", help="Backfill from 2025-01-01")
     parser.add_argument("--start", help="Start date YYYY-MM-DD (overrides --backfill)")
@@ -119,7 +128,7 @@ def main() -> None:
     else:
         start_date = yesterday
 
-    users_to_sync = list(USERS) if args.user == "all" else [args.user]
+    users_to_sync = _resolve_users(args.user)
 
     for user in users_to_sync:
         sync_user(user, start_date, end_date, force=args.resync)

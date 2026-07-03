@@ -65,8 +65,13 @@ def authenticate(user: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in ("tezuesh", "kakul"):
-        print("Usage: uv run python -m runforlife.auth [tezuesh|kakul]")
+    # Accept any syntactically-valid handle — auth runs BEFORE the athlete dir
+    # exists during onboarding, so we validate shape only, not configured-ness.
+    from runforlife.storage.paths import valid_handle
+
+    if len(sys.argv) != 2 or not valid_handle(sys.argv[1]):
+        print("Usage: uv run python -m runforlife.auth <handle>")
+        print("  <handle>: lowercase letters/numbers/underscores, starts with a letter (2-21 chars)")
         sys.exit(1)
 
     authenticate(sys.argv[1])

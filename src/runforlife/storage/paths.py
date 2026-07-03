@@ -9,9 +9,45 @@ repo, never committed). The legacy layout under DATA_DIR/<user> is still
 exposed via legacy_user_dir() so the migration can read from it.
 """
 
+import re
 from pathlib import Path
 
 from runforlife.config import DATA_DIR, RUNFORLIFE_HOME
+
+# A handle becomes BOTH a directory name and an env-var stem
+# (GARMIN_EMAIL_<HANDLE.upper()>), so it must be a valid, filesystem- and
+# shell-safe identifier: lowercase, starts with a letter, 2-21 chars total.
+_HANDLE_RE = re.compile(r"^[a-z][a-z0-9_]{1,20}$")
+
+
+def valid_handle(name: str) -> bool:
+    """Pure syntactic check for an athlete handle.
+
+    Used by auth, which runs BEFORE the athlete dir exists during onboarding,
+    so it validates shape only — not whether the athlete is configured on disk.
+    """
+    return bool(name) and bool(_HANDLE_RE.match(name))
+
+
+def list_athletes() -> list[str]:
+    """Configured athletes: sorted handles with a profile.json on disk.
+
+    The dynamic source of truth that replaces the hardcoded config.USERS tuple.
+    Reads RUNFORLIFE_HOME/athletes/*/profile.json without creating anything
+    (unlike athlete_dir, which mkdirs on access).
+    """
+    root = RUNFORLIFE_HOME / "athletes"
+    if not root.is_dir():
+        return []
+    return sorted(
+        p.name for p in root.iterdir()
+        if p.is_dir() and (p / "profile.json").is_file()
+    )
+
+
+def is_valid_athlete(name: str) -> bool:
+    """True if `name` is a configured athlete (has a profile.json on disk)."""
+    return name in list_athletes()
 
 
 def athlete_dir(user: str) -> Path:

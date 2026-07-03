@@ -265,8 +265,7 @@ def main() -> int:
     parser.add_argument(
         "--user",
         required=True,
-        choices=config.USERS,
-        help="Athlete to compute readiness for.",
+        help="Athlete handle to compute readiness for.",
     )
     parser.add_argument(
         "--date",

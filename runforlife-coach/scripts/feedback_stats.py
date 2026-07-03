@@ -30,7 +30,6 @@ from pathlib import Path
 # Make the runforlife package importable when run from the plugin dir.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from runforlife.config import USERS  # noqa: E402
 from runforlife.storage import athlete_memory  # noqa: E402
 
 # Map free-text ratings onto a small enum so typos/casing don't fragment buckets.
@@ -165,7 +164,7 @@ def aggregate(user: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Aggregate coaching feedback by advice type.")
-    parser.add_argument("--user", required=True, choices=list(USERS))
+    parser.add_argument("--user", required=True, help="Athlete handle.")
     args = parser.parse_args()
 
     try:

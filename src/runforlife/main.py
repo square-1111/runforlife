@@ -18,7 +18,6 @@ from datetime import date
 from dotenv import load_dotenv
 
 from runforlife.agent.coordinator import Coordinator
-from runforlife.config import USERS
 from runforlife.storage.conversation_db import load_recent
 from runforlife.storage.metrics_store import has_checkin_today, upsert_subjective
 
@@ -52,8 +51,7 @@ def main() -> None:
     parser.add_argument(
         "--user",
         required=True,
-        choices=USERS,
-        help="Which athlete's session to start",
+        help="Which athlete's (handle) session to start",
     )
     args = parser.parse_args()
     user: str = args.user
