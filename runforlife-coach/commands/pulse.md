@@ -3,7 +3,7 @@ description: Quick, cheap status check on an athlete — "what's he up to these 
 argument-hint: "[athlete] [--date YYYY-MM-DD]"
 ---
 
-# /status — quick numbers + one next action (the cheap path)
+# /pulse — quick numbers + one next action (the cheap path)
 
 Raw arguments: **$ARGUMENTS**
 
@@ -20,12 +20,12 @@ Parse `$ARGUMENTS` (order-independent; the athlete is the FIRST non-flag word).
 1. **If an athlete token is present**, it MUST be exactly `tezuesh` or `kakul` (case-sensitive).
    Otherwise **STOP**:
 
-   > Invalid athlete `<what they passed>`. Usage: `/status [tezuesh|kakul] [--date YYYY-MM-DD]`.
+   > Invalid athlete `<what they passed>`. Usage: `/pulse [tezuesh|kakul] [--date YYYY-MM-DD]`.
 
 2. **If no athlete token is present**, read `~/.runforlife/active_athlete`. If it prints `tezuesh`
    or `kakul`, use it. If missing/empty, **STOP**:
 
-   > No active athlete set. Run `/switch <tezuesh|kakul>` first, or pass the name: `/status tezuesh`.
+   > No active athlete set. Run `/switch <tezuesh|kakul>` first, or pass the name: `/pulse tezuesh`.
 
 3. Hold the resolved name as `<athlete>` and pass it explicitly to every subagent — never let one
    infer it.

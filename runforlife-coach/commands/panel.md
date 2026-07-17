@@ -1,5 +1,5 @@
 ---
-description: Convene the full expert PANEL on a genuinely cross-domain question — first fetch the numbers ONCE (analytics + parallel-fetch), then fan out five interpretation lenses (run coach, exercise-science, recovery, physio, strength/Hyrox) fed that shared bundle, and synthesize ONE combined numbers-first answer anchored to the sub-60 Hyrox Pro north star. Single-domain/status asks are redirected to the cheaper /status or a specialist.
+description: Convene the full expert PANEL on a genuinely cross-domain question — first fetch the numbers ONCE (analytics + parallel-fetch), then fan out five interpretation lenses (run coach, exercise-science, recovery, physio, strength/Hyrox) fed that shared bundle, and synthesize ONE combined numbers-first answer anchored to the sub-60 Hyrox Pro north star. Single-domain/status asks are redirected to the cheaper /pulse or a specialist.
 argument-hint: "[athlete] [question...] [--date YYYY-MM-DD]"
 ---
 
@@ -12,7 +12,7 @@ should I structure this week?", "is my knee niggle going to derail Hyrox prep?",
 improving?"). It fetches the numbers ONCE, fans out the interpretation lenses over that shared
 bundle, and you synthesize ONE combined call. Follow the steps in order. Numbers first, no LLM
 arithmetic — every number comes from a subagent's read of the data, never from you. Single-domain or
-status questions are cheaper via `/status` or a specific specialist — §5 redirects them.
+status questions are cheaper via `/pulse` or a specific specialist — §5 redirects them.
 
 ## 1. Resolve the athlete
 
@@ -102,12 +102,12 @@ pay that when the question genuinely spans domains. Classify `<question>` first:
   on track for the HM?") — a full panel is wasteful. **STOP** and point the athlete at the cheaper
   route, then do nothing else:
 
-  > That's a `<domain>` question, not a cross-domain one — `/status <athlete>` (quick numbers +
+  > That's a `<domain>` question, not a cross-domain one — `/pulse <athlete>` (quick numbers +
   > one next action) or the specific specialist will answer it far cheaper than the full panel.
   > Re-run `/panel` if you want every lens weighing in.
 
   Map obvious asks: recovery/sleep/HRV → `/status` or recovery-specialist; race/goal/on-track →
-  `/goal-status`; "what's he up to"/status/momentum → `/status`. If the athlete explicitly says
+  `/goal-status`; "what's he up to"/status/momentum → `/pulse`. If the athlete explicitly says
   "full panel" or "everyone weigh in," treat it as cross-domain and proceed.
 - **Genuinely cross-domain** (a call that needs training + recovery + physio + strength to trade
   off against each other — "how should I structure this week?", "is this niggle going to derail
