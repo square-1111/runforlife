@@ -1,5 +1,5 @@
 ---
-description: Convene the full expert PANEL on an athlete's free-text question — spawn all six specialists (elite run coach, exercise-science translator, recovery, physio, strength/Hyrox, analytics) in parallel, each answering from its own lens, then synthesize ONE combined numbers-first answer anchored to the sub-60 Hyrox Pro north star.
+description: Convene the full expert PANEL on a genuinely cross-domain question — first fetch the numbers ONCE (analytics + parallel-fetch), then fan out five interpretation lenses (run coach, exercise-science, recovery, physio, strength/Hyrox) fed that shared bundle, and synthesize ONE combined numbers-first answer anchored to the sub-60 Hyrox Pro north star. Single-domain/status asks are redirected to the cheaper /status or a specialist.
 argument-hint: "[athlete] [question...] [--date YYYY-MM-DD]"
 ---
 
@@ -7,11 +7,12 @@ argument-hint: "[athlete] [question...] [--date YYYY-MM-DD]"
 
 Raw arguments: **$ARGUMENTS**
 
-This is for open-ended, cross-domain questions where no single specialist owns the answer ("how
+This is for open-ended, **cross-domain** questions where no single specialist owns the answer ("how
 should I structure this week?", "is my knee niggle going to derail Hyrox prep?", "am I actually
-improving?"). It convenes the FULL panel at once, each member answers from its own lens, and you
-synthesize ONE combined call. Follow the steps in order. Numbers first, no LLM arithmetic — every
-number comes from a subagent's read of the data, never from you.
+improving?"). It fetches the numbers ONCE, fans out the interpretation lenses over that shared
+bundle, and you synthesize ONE combined call. Follow the steps in order. Numbers first, no LLM
+arithmetic — every number comes from a subagent's read of the data, never from you. Single-domain or
+status questions are cheaper via `/status` or a specific specialist — §5 redirects them.
 
 ## 1. Resolve the athlete
 
@@ -92,38 +93,75 @@ DB silently poisons every lens with "as of last week" numbers dressed up as toda
    sync-then-guess — follow §3 and STOP. Auto-sync only ever *backfills a gap* on a DB that already
    has data; it never manufactures a panel answer from nothing.
 
-## 5. Fan out to the panel IN PARALLEL (pass the athlete + question explicitly)
+## 5. Right-size the fan-out (scale effort to the question — do NOT skip)
 
-Invoke ALL SIX subagents via the Task tool **in a single message** so they run concurrently — do
-not wait for one to finish before starting the next. Each runs in isolated context, so the athlete
-name, the target date, and the full question text MUST be written into every prompt — they are not
-inherited. In each prompt, state the athlete name and the question explicitly, then ask for that
-member's take **from its domain only**. Instruct each agent: answer ONLY from your lens, and if the
-question does not touch your domain, reply briefly `nothing material to add from my lens` rather
-than reaching outside your expertise or padding.
+The full panel is the heavy path: it spawns multiple subagents and costs ~15× a single read. Only
+pay that when the question genuinely spans domains. Classify `<question>` first:
 
-- **kenyan-camp-coach** — the elite run-execution / training-culture lens: how a top camp would
-  structure the running around `<question>` for `<athlete>` — session sequencing, easy/hard
-  distribution, pacing discipline, weekly rhythm.
-- **exercise-science-translator** — the physiology + evidence lens: explain the relevant mechanism
-  in plain language for `<athlete>`'s `<question>` (aerobic development, adaptation, fueling,
-  fatigue), grounded in evidence, no jargon.
-- **recovery-specialist** — the recovery-doctor lens: sleep / HRV / readiness for `<athlete>` as it
-  bears on `<question>` — is there capacity to absorb load, or does the body need to back off?
-  Return the readiness score/tier and the driving metrics.
-- **physio-specialist** — the injury-risk / biomechanics / rehab lens: any load-management, tissue,
-  or movement flags for `<athlete>` relevant to `<question>`; whether the plan raises injury risk.
-- **strength-specialist** — the Hyrox-guide lens: strength and Hyrox-station implications of
-  `<question>` for `<athlete>` — how the running plan interacts with strength/compromised-running
-  demands on the road to sub-60.
-- **analytics-specialist** — the data-expert lens: explore `<athlete>`'s `metrics.db` to surface
-  the numbers that actually answer `<question>` (trends, volumes, EF/pace-at-HR, ACWR) so the panel
-  is grounded in real reads, not guesses.
+- **Single-domain or status ask** ("how's my sleep?", "what's my ACWR?", "what's he up to?", "am I
+  on track for the HM?") — a full panel is wasteful. **STOP** and point the athlete at the cheaper
+  route, then do nothing else:
 
-## 6. Synthesize ONE combined answer — human, brutal-but-positive, week-over-week
+  > That's a `<domain>` question, not a cross-domain one — `/status <athlete>` (quick numbers +
+  > one next action) or the specific specialist will answer it far cheaper than the full panel.
+  > Re-run `/panel` if you want every lens weighing in.
+
+  Map obvious asks: recovery/sleep/HRV → `/status` or recovery-specialist; race/goal/on-track →
+  `/goal-status`; "what's he up to"/status/momentum → `/status`. If the athlete explicitly says
+  "full panel" or "everyone weigh in," treat it as cross-domain and proceed.
+- **Genuinely cross-domain** (a call that needs training + recovery + physio + strength to trade
+  off against each other — "how should I structure this week?", "is this niggle going to derail
+  Hyrox?", "am I overreaching?") — proceed to §6.
+
+## 6. Fetch the numbers ONCE, then fan out thin (do NOT skip)
+
+Do NOT let the lenses each re-query the DB — that is the single biggest source of wasted tokens
+(and of inconsistent numbers between lenses). Gather the data ONE time, then hand every lens the
+same bundle.
+
+Spawn these **two data-gatherers in parallel** (single message), passing `<athlete>` and `<date>`
+explicitly:
+
+- **analytics-specialist** — build the full numeric bundle that §8 needs: the four momentum rows
+  (per the "Week-over-week" spec below), runs-done this ISO week, the last ~10-day run log, latest
+  ACWR, and weekly km totals. This is the numeric backbone — leave it on its default (capable)
+  model.
+- **parallel-fetch** — readiness (score/tier + driving components), banister (fitness/fatigue/
+  form), and any non-expired ephemeral entries (injury/illness/travel/plan template).
+
+Merge their two returns verbatim into one **DATA BUNDLE** (plain text). Do NOT compute or edit any
+number — you only concatenate and label. Carry the §3/§4 guardrails: if the DB was unsynced and
+could not be backfilled, mark every figure "as of `<latest date>`"; treat the stale-readiness
+placeholder as "no readiness data."
+
+## 7. Fan out the interpretive lenses — thin, tiered, fed the bundle
+
+Invoke these FIVE lenses via the Task tool **in a single message** so they run concurrently. They
+are interpretation workers (Haiku) — each runs in isolated context, so the athlete name, the date,
+the full `<question>`, **and the entire DATA BUNDLE from §6** MUST be written into every prompt.
+Instruct each: **reason over the provided numbers — do NOT re-query the DB or re-run scripts unless
+a specific value you need is genuinely missing from the bundle.** Answer ONLY from your lens; if the
+question doesn't touch your domain, reply `nothing material to add from my lens` rather than padding.
+
+- **kenyan-camp-coach** — run-execution / training-culture lens: how a top camp would structure the
+  running around `<question>` — session sequencing, easy/hard distribution, pacing discipline,
+  weekly rhythm.
+- **exercise-science-translator** — physiology + evidence lens: the relevant mechanism in plain
+  language (aerobic development, adaptation, fueling, fatigue), grounded in the bundle, no jargon.
+- **recovery-specialist** — recovery-doctor lens: interpret the readiness/HRV/sleep numbers in the
+  bundle — capacity to absorb load, or back off? Restate the readiness score/tier and drivers.
+- **physio-specialist** — injury-risk / biomechanics lens: load-management flags (ACWR, volume
+  jumps), cadence/over-striding, active niggles; whether the plan raises injury risk.
+- **strength-specialist** — Hyrox-guide lens: strength and station implications, and how the running
+  plan interacts with strength/compromised-running demands on the road to sub-60.
+
+If a genuine recovery/physio-vs-push conflict emerges, invoke **conflict-resolver** (default model)
+per the conflict rule at the end of this file.
+
+## 8. Synthesize ONE combined answer — human, brutal-but-positive, week-over-week
 
 Combine the lenses into a single response written **to the athlete as "you," present tense** — it
-answers THEIR question first, not "the panel found X." Do NOT dump six separate blocks. Lens
+answers THEIR question first, not "the panel found X." Do NOT dump separate per-lens blocks. Lens
 attributions compress to at most one clause, and only when a lens actually changed the call.
 
 Open with a warm, honest headline, then numbers. Celebrate a real earned win, THEN name the gap.
